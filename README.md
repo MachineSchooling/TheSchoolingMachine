@@ -1,8 +1,5 @@
 # TheSchoolingMachine
-Twitch IRC Bot for Magic: the Gathering
-
-# About:
-TheSchoolingMachine is is created and maintained by Twitch user MachineSchooling (Wally Wissner) to provide advanced features related to Magic: the Gathering to Twitch users. The project started in summer 2016, and new features are being actively introduced. TheSchoolingMachine is written in Python 2.7.
+TheSchoolingMachine is an IRC bot created and maintained by Twitch user MachineSchooling (Wally Wissner) to provide advanced features related to Magic: the Gathering to Twitch users. The project started in summer 2016, and new features are being actively introduced. TheSchoolingMachine is written in Python 2.7.
 
 # Commands:
 !whatdeck CARDNAME
@@ -27,3 +24,5 @@ Custom exceptions related to cards or metagame archetypes are located in mtgexce
 The program that downloads card data from MTGJSON.com is located in mtgjson.py.
 
 Required to run the bot, but not included here, is a file called private.py which contains the bot's login information.
+
+Required to run the bot, but not included here, is a file called users.txt which contains the bot's active user list.
