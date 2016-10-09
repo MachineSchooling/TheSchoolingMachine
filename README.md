@@ -1,5 +1,5 @@
 # TheSchoolingMachine
-Twitch Bot for Magic: the Gathering
+Twitch IRC Bot for Magic: the Gathering
 
 # About:
 TheSchoolingMachine is is created and maintained by Twitch user MachineSchooling (Wally Wissner) to provide advanced features related to Magic: the Gathering to Twitch users. The project started in summer 2016, and new features are being actively introduced. TheSchoolingMachine is written in Python 2.7.
