@@ -11,31 +11,17 @@ import commands
 import private
 
 
-"""
-TO DO:
-handle unicode error
-get bot running from pythoneverywhere
-com - get decklist from mtggoldfish
-com - screenshot and make imgur link (temp fix for opponent's hand) (works for !deck command as well)
-
-fuzzy card input
-automatic screen grabs
-prepare for exceptions
-command user levels
-com - do i have lethal? (ambitious project)
-com - opponent's hand (after revealed) (python ocr: optical character recognition)
-"""
-
-
+# Return the current date and time. Used for bot's log.
 def now():
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 #FINISHED
+# PRIVMSG (private message) object which unpacks the data from a received IRC message.
 class PRIVMSG(object):
     def __init__(self, bot, string):
         """
-        :param bot:
+        :param bot: Bot from which the PRIVMSG is received.
         :param string: Raw text sent by IRC server including the terminating newline characters.
         """
 
@@ -91,6 +77,7 @@ class PRIVMSG(object):
 
 
 #WORKING
+# The main object that runs the bot, interfaces with the IRC, and calls helper programs.
 class bot(object):
     def __init__(self, HOST, PORT, NICK, PASS):
         # Server id data.
