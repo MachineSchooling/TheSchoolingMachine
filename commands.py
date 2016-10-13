@@ -7,8 +7,8 @@ import metagame
 from metagameanalysis import metagameDistribution
 from metagameanalysis import metagameRunning
 import mtgjson
-#import fuzzycard
-
+from fuzzycard import nearestCardname
+from fuzzycard import nearestDeckname
 
 #FINISHED
 def test(PRIVMSG):
@@ -43,9 +43,15 @@ def decklist(PRIVMSG):
     :param PRIVMSG:
     :return:
     """
+    deck = PRIVMSG.args
+    deck = nearestDeckname(deck)
+
+    message =
+
+    PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
 
 
-#WORKING
+#FINISHED
 def running(PRIVMSG):
     """
     Probability deck archetype is running cardname in maindeck and sideboard.
@@ -56,6 +62,8 @@ def running(PRIVMSG):
     try:
         args = PRIVMSG.args.split(':')
         archetype, card = [i.lstrip() for i in args]
+        card = nearestCardname(card)
+        archetype = nearestDeckname(archetype)
 
         # Calculate and message the deck's average number of the card run.
         try:
@@ -83,7 +91,8 @@ def whatdeck(PRIVMSG):
     :return: True if a !whatdeck query call is sent to the IRC server. Else false.
     """
 
-    args = PRIVMSG.args
+    card = PRIVMSG.args
+    card = nearestCardname(card)
 
     # Seperate the N Cardname pairs from each other.
     # query = query.split(";") if ";" in query else query.split(",")
@@ -94,12 +103,14 @@ def whatdeck(PRIVMSG):
 
     # Turn table of (archetype, percentage) into string of N% archetype.
 
-    probabilitiesTable = metagameDistribution(args)
+    probabilitiesTable = metagameDistribution(card)
     if probabilitiesTable:
-        message = ", ".join("{1} {0}".format(archetype, percent) for archetype, percent in probabilitiesTable)
+        message = "Weighted probabilities for {}: ".format(card)\
+                  + ", ".join("{1} {0}".format(archetype, percent) for archetype, percent in probabilitiesTable)
         PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
     else:
         message = "No decks in the format contain that card."
         PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
 
 
+def snip(PRIVMSG):

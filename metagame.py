@@ -1,3 +1,7 @@
+# JSON format is not necessary and the structure of the JSON has become unmanageably complex.
+# metagame.py and metagameDict be replaced with a pickler and a python object with more intuitive structure.
+# metagameanalysis with be similarly adjusted.
+
 from pprint import pprint
 from bs4 import BeautifulSoup
 import urllib2
