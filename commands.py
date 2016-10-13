@@ -21,7 +21,7 @@ def commands(PRIVMSG):
     Links to a list of commands.
     :return: True if a !commands query call is sent to the IRC server. Else false.
     """
-    message = "You can find a list of my commands here: https://github.com/MachineSchooling/TheSchoolingMachine"
+    message = "You can find a list of my commands here: https://github.com/MachineSchooling/TheSchoolingMachine#commands"
     PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
 
 #WORKING
@@ -46,7 +46,7 @@ def decklist(PRIVMSG):
     deck = PRIVMSG.args
     deck = nearestDeckname(deck)
 
-    message = 
+    message =
 
     # PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
 '''
