@@ -23,6 +23,8 @@ Custom exceptions related to cards or metagame archetypes are located in mtgexce
 
 The program that downloads card data from MTGJSON.com is located in mtgjson.py.
 
+Inexact user input is handled in fuzzycard.py.
+
 Required to run the bot, but not included here, is a file called private.py which contains the bot's login information.
 
 Required to run the bot, but not included here, is a file called users.txt which contains the bot's active user list.
