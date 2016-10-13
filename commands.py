@@ -35,7 +35,7 @@ def join(PRIVMSG):
         pass
     # Update users list and JOIN.
 
-
+'''
 #WORKING
 def decklist(PRIVMSG):
     """
@@ -46,10 +46,10 @@ def decklist(PRIVMSG):
     deck = PRIVMSG.args
     deck = nearestDeckname(deck)
 
-    message =
+    message = 
 
-    PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
-
+    # PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
+'''
 
 #FINISHED
 def running(PRIVMSG):
@@ -114,3 +114,4 @@ def whatdeck(PRIVMSG):
 
 
 def snip(PRIVMSG):
+    pass
