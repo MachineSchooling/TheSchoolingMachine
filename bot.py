@@ -148,6 +148,8 @@ class bot(object):
         except OSError:
             print "json file not found."
 
+        # Start the bot.
+        self.mainLoop()
 
     # Return the current date and time. Used for bot's log.
     def now(self):
@@ -257,5 +259,3 @@ TheSchoolingMachine = bot(
     NICK="theschoolingmachine",
     PASS=private.PASS
     )
-
-TheSchoolingMachine.mainLoop()
