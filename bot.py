@@ -28,7 +28,10 @@ class PRIVMSG(object):
 
         # Parse the raw response to find the NICK, CHAN, and content of the response.
         self.parse(self.raw)
-        print "NICK: {}, CHAN: {}, content: {}\r\n".format(self.NICK, self.CHAN, self.content)
+
+        # Output the parsed response to the console.
+        toconsole = "response {} << NICK: {}, CHAN: {}, CONTENT: {}\r\n"
+        print toconsole.format(self.bot.now(), self.NICK, self.CHAN, self.content)
 
     #FINISHED
     def parse(self, raw):
@@ -136,6 +139,7 @@ class bot(object):
 
         for CHAN in self.CHANlist:
             self.join(CHAN)
+
         print "\r\n"
 
         # Cooldown time between messages sent. 1 / Maximum messages per second. To avoid user spam and server bans.
@@ -229,7 +233,6 @@ class bot(object):
             # Ignore messages with weird unicode characters.
             try:
                 response = self.socket.recv(self.SIZE).decode("utf-8")
-                print "response {} << {}".format(self.now(), response)
 
             except UnicodeEncodeError:
                 print "Unicode character not recognized.\r\n"
@@ -251,6 +254,9 @@ class bot(object):
                 if res.commandQ():
                     time.sleep(self.COOL)
                     continue
+
+            else:
+                print "response {} << {}".format(self.now(), response)
 
 
 TheSchoolingMachine = bot(
