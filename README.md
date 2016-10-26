@@ -2,6 +2,15 @@
 TheSchoolingMachine is an IRC bot created and maintained by Twitch user MachineSchooling (Wally Wissner) to provide advanced features related to Magic: the Gathering to Twitch users. The project started in summer 2016, and new features are being actively introduced. TheSchoolingMachine is written in Python 2.7.
 
 # Commands:
+
+!join
+
+Type this command in TheSchoolingMachine's Twitch chat (https://www.twitch.tv/machineschooling) to have the bot join your channel and have its commands be accessable from your chat.
+
+!part
+
+Type this command in your channel's chat and the bot will stop responding to commands issued from your chat.
+
 !whatdeck CARDNAME
 
 Provides the probabilities of which deck archetype has been encountered based on the cards played. Assumes that all cards in a deck are equally likely to be played.
