@@ -234,29 +234,30 @@ class bot(object):
             try:
                 response = self.socket.recv(self.SIZE).decode("utf-8")
 
+                # Only one of the below functions should message the IRC server per loop.
+                # Otherwise the server will time the bot out for going over maximum messages per 30 seconds limit.
+
+                # If the response is a ping, pong back.
+                if self.ping(response):
+                    time.sleep(self.COOL)
+                    continue
+
+                # See if the response is a PRIVMSG and if it is, see if it contains a command.
+                if "PRIVMSG" in response:
+                    res = PRIVMSG(bot=self, string=response)
+                    # If the response contains a command, call it and message the IRC back the output.
+                    if res.commandQ():
+                        time.sleep(self.COOL)
+                        continue
+
+                else:
+                    print "response {} << {}".format(self.now(), response)
+
+
             except UnicodeEncodeError:
                 print "Unicode character not recognized.\r\n"
                 continue
 
-
-            # Only one of the below functions should message the IRC server per loop.
-            # Otherwise the server will time the bot out for going over maximum messages per 30 seconds limit.
-
-            # If the response is a ping, pong back.
-            if self.ping(response):
-                time.sleep(self.COOL)
-                continue
-
-            # See if the response is a PRIVMSG and if it is, see if it contains a command.
-            if "PRIVMSG" in response:
-                res = PRIVMSG(bot=self, string=response)
-                # If the response contains a command, call it and message the IRC back the output.
-                if res.commandQ():
-                    time.sleep(self.COOL)
-                    continue
-
-            else:
-                print "response {} << {}".format(self.now(), response)
 
 
 TheSchoolingMachine = bot(
