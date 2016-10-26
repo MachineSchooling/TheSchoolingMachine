@@ -15,25 +15,46 @@ def test(PRIVMSG):
     PRIVMSG.bot.chat(PRIVMSG.CHAN, "Hello, Twitch!")
 
 
-
+#FINISHED
 def commands(PRIVMSG):
     """
     Links to a list of commands.
-    :return: True if a !commands query call is sent to the IRC server. Else false.
+    :return: True if a !commands call is sent to the IRC server. Else false.
     """
     message = "You can find a list of my commands here: https://github.com/MachineSchooling/TheSchoolingMachine#commands"
     PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
 
-#WORKING
+#FINISHED
+def about(PRIVMSG):
+    """
+    Links to a list of commands.
+    :return: True if a !about call is sent to the IRC server. Else false.
+    """
+    message = "You can find out more about me here: " \
+              "https://github.com/MachineSchooling/TheSchoolingMachine#theschoolingmachine"
+    PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
+
+
+#FINISHED
 def join(PRIVMSG):
-    """
-    Add command caller to list of users.
-    :param args:
-    :return:
-    """
-    if PRIVMSG.args.NICK:
-        pass
-    # Update users list and JOIN.
+    # Add command caller to list of users.
+    user = PRIVMSG.NICK
+    # If response is received on bot's channel add user to user list.
+    if PRIVMSG.CHAN == PRIVMSG.bot.NICK:
+        PRIVMSG.bot.CHANlist.addperson(user)
+        PRIVMSG.bot.join(user)
+
+
+#FINISHED
+def part(PRIVMSG):
+    # Remove command caller from list of users.
+    user = PRIVMSG.NICK
+    # If response is from the broadcaster of the channel remove the user from user list.
+    if PRIVMSG.CHAN == PRIVMSG.NICK:
+        PRIVMSG.bot.CHANlist.delperson(user)
+        PRIVMSG.bot.part(user)
+
+
 
 '''
 #WORKING
@@ -43,12 +64,14 @@ def decklist(PRIVMSG):
     :param PRIVMSG:
     :return:
     """
+
     deck = PRIVMSG.args
-    deck = nearestDeckname(deck)
 
-    message =
+    if deck:
+        deck = nearestDeckname(deck)
+        message =
 
-    # PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
+        PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
 '''
 
 #FINISHED
@@ -112,6 +135,8 @@ def whatdeck(PRIVMSG):
         message = "No decks in the format contain that card."
         PRIVMSG.bot.chat(PRIVMSG.CHAN, message)
 
-
+"""
+#WORKING
 def snip(PRIVMSG):
     pass
+"""

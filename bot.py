@@ -11,11 +11,6 @@ import commands
 import private
 
 
-# Return the current date and time. Used for bot's log.
-def now():
-    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
 #FINISHED
 # PRIVMSG (private message) object which unpacks the data from a received IRC message.
 class PRIVMSG(object):
@@ -75,8 +70,48 @@ class PRIVMSG(object):
             return False
 
 
+#FINISHED
+# personlist class is for maintaining lists of user, e.g., broadcaster channels or bot admins
+class personlist(object):
+    def __init__(self, file):
+        self.file = file
+        self.memberlist = self.load(self.file)
 
-#WORKING
+
+    def __getitem__(self, item):
+        return self.memberlist[item]
+
+
+    def __iter__(self):
+        return iter(self.memberlist)
+
+
+    def load(self, document):
+        with open(self.file, 'r') as f:
+            memberlist = [member.strip('\n') for member in f]
+            f.close()
+        return memberlist
+
+
+    def addperson(self, person):
+        self.memberlist.append(person)
+
+        with open(self.file, 'a') as f:
+            f.write(person + '\n')
+            f.close()
+
+
+    def delperson(self, person):
+        self.memberlist.remove(person)
+
+        with open(self.file, 'w') as f:
+            for member in self.memberlist:
+                f.write(member + '\n')
+            f.close()
+
+
+
+#FINISHED
 # The main object that runs the bot, interfaces with the IRC, and calls helper programs.
 class bot(object):
     def __init__(self, HOST, PORT, NICK, PASS):
@@ -91,30 +126,21 @@ class bot(object):
         self.SIZE = 2024
 
         # Network functions.
-        self.s = socket.socket()
-        self.s.connect((HOST, PORT))
-        self.s.send("PASS {}\r\n".format(PASS).encode("utf-8"))
-        self.s.send("NICK {}\r\n".format(NICK).encode("utf-8"))
+        self.socket = socket.socket()
+        self.socket.connect((HOST, PORT))
+        self.socket.send("PASS {}\r\n".format(PASS).encode("utf-8"))
+        self.socket.send("NICK {}\r\n".format(NICK).encode("utf-8"))
 
         # Join each channel in list of users.
-        self.CHANlist = self.getusers("users.txt")
+        self.CHANlist = personlist("users.txt")
 
-        print "users:"
         for CHAN in self.CHANlist:
-            print CHAN
-            self.s.send("JOIN #{}\r\n".format(CHAN).encode("utf-8"))
+            self.join(CHAN)
         print "\r\n"
-
-        #WORKING
-        # Whether the bot is a mod in the active channel.
-        self.mod = False
 
         # Cooldown time between messages sent. 1 / Maximum messages per second. To avoid user spam and server bans.
         # 100messages/30seconds limit is iff you only message channels in which you are a moderator.
-        if self.mod:
-            self.COOL = 30.0 / 100.0
-        else:
-            self.COOL = 30.0 / 20.0
+        self.COOL = 30.0 / 20.0
 
         # Last time metagame json file was updated.
         try:
@@ -123,33 +149,21 @@ class bot(object):
             print "json file not found."
 
 
-    #FINISHED
-    def getusers(self, file):
-        """
-        :param file: File containing column of user channel names.
-        :return outlist: List of user channels who are registered with the bot.
-        """
-        with open(file) as f:
-            userlist = [user.strip('\n') for user in f]
-            f.close()
-        return userlist
-
-    #WORKING
-    def adduser(self, file, user):
-        pass
-
-    #WORKING
-    def deluser(self, file, user):
-        pass
+    # Return the current date and time. Used for bot's log.
+    def now(self):
+        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-    #WORKING
-    def modQ(self):
-        """
+    # The bot joins the IRC channel CHAN.
+    def join(self, CHAN):
+        self.socket.send("JOIN #{}\r\n".format(CHAN).encode("utf-8"))
+        print "{} has joined {}'s channel".format(self.NICK, CHAN)
 
-        :return: None.
-        """
-        self.mod = True
+
+    # The bot departs from the IRC channel CHAN.
+    def part(self, CHAN):
+        self.socket.send("PART #{}\r\n".format(CHAN).encode("utf-8"))
+        print "{} has departed from {}'s channel".format(self.NICK, CHAN)
 
 
     #FINISHED
@@ -159,8 +173,8 @@ class bot(object):
         :param message: String. The message to be sent.
         :return: None. A message is sent to the IRC server.
         """
-        self.s.send("PRIVMSG #{} :{}\r\n".format(CHAN, message).encode("utf-8"))
-        print "message  {} >> {}\r\n".format(now(), message)
+        self.socket.send("PRIVMSG #{} :{}\r\n".format(CHAN, message).encode("utf-8"))
+        print "message  {} >> {}\r\n".format(self.now(), message)
 
 
     #FINISHED
@@ -171,11 +185,12 @@ class bot(object):
         :return: True if a pong is sent to the IRC server. Else false.
         """
         if response == "PING :tmi.twitch.tv\r\n":
-            self.s.send("PONG :tmi.twitch.tv\r\n".encode("utf-8"))
-            print "message  {} >> PONG\r\n".format(now())
+            self.socket.send("PONG :tmi.twitch.tv\r\n".encode("utf-8"))
+            print "message  {} >> PONG\r\n".format(self.now())
             return True
         else:
             return False
+
 
     #FINISHED
     def metagameupdate(self, magicFormat="modern", medium="online", elapsed=60*60*24, start=0, end=24):
@@ -211,8 +226,8 @@ class bot(object):
             # Read next response from IRC.
             # Ignore messages with weird unicode characters.
             try:
-                response = self.s.recv(self.SIZE).decode("utf-8")
-                print "response {} << {}".format(now(), response)
+                response = self.socket.recv(self.SIZE).decode("utf-8")
+                print "response {} << {}".format(self.now(), response)
 
             except UnicodeEncodeError:
                 print "Unicode character not recognized.\r\n"
