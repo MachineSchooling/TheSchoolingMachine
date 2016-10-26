@@ -73,6 +73,7 @@ class PRIVMSG(object):
             return False
 
 
+
 #FINISHED
 # personlist class is for maintaining lists of user, e.g., broadcaster channels or bot admins
 class personlist(object):
@@ -80,14 +81,11 @@ class personlist(object):
         self.file = file
         self.memberlist = self.load(self.file)
 
-
     def __getitem__(self, item):
         return self.memberlist[item]
 
-
     def __iter__(self):
         return iter(self.memberlist)
-
 
     def load(self, document):
         with open(self.file, 'r') as f:
@@ -95,14 +93,12 @@ class personlist(object):
             f.close()
         return memberlist
 
-
     def addperson(self, person):
         self.memberlist.append(person)
 
         with open(self.file, 'a') as f:
             f.write(person + '\n')
             f.close()
-
 
     def delperson(self, person):
         self.memberlist.remove(person)
@@ -134,17 +130,21 @@ class bot(object):
         self.socket.send("PASS {}\r\n".format(PASS).encode("utf-8"))
         self.socket.send("NICK {}\r\n".format(NICK).encode("utf-8"))
 
-        # Join each channel in list of users.
-        self.CHANlist = personlist("users.txt")
-
-        for CHAN in self.CHANlist:
-            self.join(CHAN)
-
-        print "\r\n"
-
         # Cooldown time between messages sent. 1 / Maximum messages per second. To avoid user spam and server bans.
         # 100messages/30seconds limit is iff you only message channels in which you are a moderator.
-        self.COOL = 30.0 / 20.0
+        # 20messages/30seconds otherwise.
+        self.messageCOOL = 30.0 / 20.0
+
+        # Cooldown time between joins sent. 1 / Maximum joins per second. To avoid server bans.
+        # 50joins/15seconds.
+        self.joinCOOL = 15.0 / 50.0
+
+        # Join each channel in list of users.
+        self.CHANlist = personlist("users.txt")
+        for CHAN in self.CHANlist:
+            self.join(CHAN)
+            time.sleep(self.joinCOOL)
+        print "\r\n"
 
         # Last time metagame json file was updated.
         try:
@@ -224,10 +224,8 @@ class bot(object):
 
     def mainLoop(self):
         while True:
-
             # See if metagame data needs to be updated and if so do it.
             self.metagameupdate()
-
 
             # Read next response from IRC.
             # Ignore messages with weird unicode characters.
@@ -239,7 +237,7 @@ class bot(object):
 
                 # If the response is a ping, pong back.
                 if self.ping(response):
-                    time.sleep(self.COOL)
+                    time.sleep(self.messageCOOL)
                     continue
 
                 # See if the response is a PRIVMSG and if it is, see if it contains a command.
@@ -247,12 +245,10 @@ class bot(object):
                     res = PRIVMSG(bot=self, string=response)
                     # If the response contains a command, call it and message the IRC back the output.
                     if res.commandQ():
-                        time.sleep(self.COOL)
+                        time.sleep(self.messageCOOL)
                         continue
-
                 else:
                     print "response {} << {}".format(self.now(), response)
-
 
             except UnicodeEncodeError:
                 print "Unicode character not recognized.\r\n"
