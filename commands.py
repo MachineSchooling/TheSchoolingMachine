@@ -41,9 +41,13 @@ def join(PRIVMSG):
     user = PRIVMSG.NICK
     # If response is received on bot's channel add user to user list.
     if PRIVMSG.CHAN == PRIVMSG.bot.NICK:
-        PRIVMSG.bot.CHANlist.addperson(user)
-        PRIVMSG.bot.join(user)
-
+        if PRIVMSG.bot.CHANlist.addperson(user):
+            PRIVMSG.bot.join(user)
+            message = "{} has joined {}'s channel.".format(PRIVMSG.bot.NICK, user)
+            PRIVMSG.bot.chat(CHAN=PRIVMSG.bot.NICK, message=message)
+        else:
+            message = "{} has already joined {}'s channel.".format(PRIVMSG.bot.NICK, user)
+            PRIVMSG.bot.chat(CHAN=PRIVMSG.bot.NICK, message=message)
 
 #FINISHED
 def part(PRIVMSG):
@@ -52,9 +56,9 @@ def part(PRIVMSG):
     # If response is from the broadcaster of the channel remove the user from user list.
     if PRIVMSG.CHAN == PRIVMSG.NICK:
         PRIVMSG.bot.CHANlist.delperson(user)
+        message = "{} will now depart {}'s channel.".format(PRIVMSG.bot.NICK, user)
+        PRIVMSG.bot.chat(CHAN=user, message=message)
         PRIVMSG.bot.part(user)
-
-
 
 '''
 #WORKING
@@ -109,7 +113,7 @@ def running(PRIVMSG):
 #WORKING
 def whatdeck(PRIVMSG):
     """
-    Calls Baysian Metagame Analysis program.
+    Calls Bayesian Metagame Analysis program.
     :param PRIVMSG:
     :return: True if a !whatdeck query call is sent to the IRC server. Else false.
     """

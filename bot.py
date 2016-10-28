@@ -39,14 +39,17 @@ class PRIVMSG(object):
         :param raw: Raw text sent by IRC server minus the terminating newline characters
         :return list: List elements correspond to NICK, CHAN, and content of the response.
         """
-        # IRC server data is encapsulated by semicolons. Response content follows.
-        data, content = [i for i in raw.lstrip(':').split(':', 1)]
-        # Channel is what follows the '#' and has no spaces.
-        _, CHAN = [i.strip() for i in data.split('#')]
-        # NICK ends before the first '!'.
-        NICK, _ = data.split('!')
+        try:
+            # IRC server data is encapsulated by semicolons. Response content follows.
+            data, content = [i for i in raw.lstrip(':').split(':', 1)]
+            # Channel is what follows the '#' and has no spaces.
+            _, CHAN = [i.strip() for i in data.split('#')]
+            # NICK ends before the first '!'.
+            NICK, _ = data.split('!')
 
-        self.NICK, self.CHAN, self.content = NICK, CHAN, content
+            self.NICK, self.CHAN, self.content = NICK, CHAN, content
+        except ValueError:
+            print "ValueError: {}".format(self.raw)
 
     #FINISHED
     def commandQ(self):
@@ -94,11 +97,14 @@ class personlist(object):
         return memberlist
 
     def addperson(self, person):
-        self.memberlist.append(person)
-
-        with open(self.file, 'a') as f:
-            f.write(person + '\n')
-            f.close()
+        if person not in self.memberlist:
+            self.memberlist.append(person)
+            with open(self.file, 'a') as f:
+                f.write(person + '\n')
+                f.close()
+            return True
+        else:
+            return False
 
     def delperson(self, person):
         self.memberlist.remove(person)
@@ -107,7 +113,7 @@ class personlist(object):
             for member in self.memberlist:
                 f.write(member + '\n')
             f.close()
-
+        return True
 
 
 #FINISHED
@@ -115,11 +121,11 @@ class personlist(object):
 class bot(object):
     def __init__(self, HOST, PORT, NICK, PASS):
         # Server id data.
-        self.HOST = HOST # Host Server
-        self.PORT = PORT # IRC Port
+        self.HOST = HOST  # Host Server
+        self.PORT = PORT  # IRC Port
         # Bot id data.
-        self.NICK = NICK # Twitch Username
-        self.PASS = PASS # Twitch Password
+        self.NICK = NICK  # Twitch Username
+        self.PASS = PASS  # Twitch Password
 
         # Maximum response read size.
         self.SIZE = 2024
@@ -163,13 +169,13 @@ class bot(object):
     # The bot joins the IRC channel CHAN.
     def join(self, CHAN):
         self.socket.send("JOIN #{}\r\n".format(CHAN).encode("utf-8"))
-        print "{} has joined {}'s channel".format(self.NICK, CHAN)
+        print "{} has joined {}'s channel\r\n".format(self.NICK, CHAN)
 
 
     # The bot departs from the IRC channel CHAN.
     def part(self, CHAN):
         self.socket.send("PART #{}\r\n".format(CHAN).encode("utf-8"))
-        print "{} has departed from {}'s channel".format(self.NICK, CHAN)
+        print "{} has departed from {}'s channel\r\n".format(self.NICK, CHAN)
 
 
     #FINISHED
@@ -232,8 +238,7 @@ class bot(object):
             try:
                 response = self.socket.recv(self.SIZE).decode("utf-8")
 
-                # Only one of the below functions should message the IRC server per loop.
-                # Otherwise the server will time the bot out for going over maximum messages per 30 seconds limit.
+                # Only one of the below functions should message the IRC server per loop to avoid server ban.
 
                 # If the response is a ping, pong back.
                 if self.ping(response):
