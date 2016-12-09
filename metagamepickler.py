@@ -69,11 +69,6 @@ def plausibile(intable, maxrows=5, threshold=.05):
 
 
 
-class NullObject(object):
-    def __add__(self, other):
-        return other
-
-
 class card(dict):
     #FINISHED
     def __init__(self, name, number=0, percent=1):
@@ -99,23 +94,19 @@ class card(dict):
 
     #FINISHED
     def average(self):
-        return sum([number * self[number] for number in self], NullObject())
+        return reduce((lambda x, y: x + y), [number * self[number] for number in self])
 
     #FINISHED
     def __add__(self, other):
-        if not isinstance(other, card):
-            return self
-
-        elif not self.name == other.name:
+        if not self.name == other.name:
             raise CardError("Cards with different names can't be combined.")
 
-        else:
-            outcard = card(name=self.name)
+        outcard = card(name=self.name)
 
-            for number in set(self.keys()) | set(other.keys()):
-                outcard[number] = self[number] + other[number]
+        for number in set(self.keys()) | set(other.keys()):
+            outcard[number] = self[number] + other[number]
 
-            return outcard
+        return outcard
 
     __radd__ = __add__
 
@@ -123,8 +114,8 @@ class card(dict):
     def __mul__(self, scalar):
         outcard = card(name=self.name)
 
-        for key in self.keys():
-            outcard[key] = self[key] * scalar
+        for number in self.keys():
+            outcard[number] = self[number] * scalar
 
         return outcard
 
@@ -157,7 +148,7 @@ class board(dict):
         outboard = board()
 
         for cardname in self:
-            outboard[cardname] = cardname * scalar
+            outboard[cardname] = self[cardname] * scalar
 
         return outboard
 
@@ -251,8 +242,7 @@ class decklist(object):
                 actualsuccesses = carddict[cardname]
                 successdraws = number
                 cardsdrawn = querysize
-                #probabilityUnion *= hypergeom.pmf(k=actualsuccesses, M=decksize, n=successdraws, N=cardsdrawn) * freq
-                probabilityUnion *= hypergeom.cdf(k=actualsuccesses, M=decksize, n=successdraws, N=cardsdrawn) * freq
+                probabilityUnion *= hypergeom.pmf(k=actualsuccesses, M=decksize, n=successdraws, N=cardsdrawn) * freq
 
         return probabilityUnion
 
@@ -270,19 +260,15 @@ class decklist(object):
 
     #WORKING
     def __add__(self, other):
-        if not isinstance(other, decklist):
-            return self
-
-        elif not self.archetype == other.archetype:
+        if not self.archetype is other.archetype:
             raise DeckError("Decklists of different archetypes can't be combined.")
 
-        else:
-            outdecklist = decklist(archetype=self.archetype, rawshare=self.rawshare + other.rawshare)
+        outdecklist = decklist(archetype=self.archetype, rawshare=self.rawshare + other.rawshare)
 
-            outdecklist.main = self.main + other.main
-            outdecklist.side = self.side + other.side
+        outdecklist.main = self.main + other.main
+        outdecklist.side = self.side + other.side
 
-            return outdecklist
+        return outdecklist
 
     __radd__ = __add__
 
@@ -313,8 +299,11 @@ class archetype(decklist):
         bisect.insort(self.sublists, item)
 
         # Merge the decklist with the archetype decklist.
-        self.main += item.main
-        self.side += item.side
+        totalshare = self.rawshare() + item.rawshare
+        oldshare = self.rawshare() / totalshare
+        newshare = item.rawshare / totalshare
+        self.main = self.main * oldshare + item.main * newshare
+        self.side = self.main * oldshare + item.side * newshare
 
     # FINISHED
     def rawshare(self):
@@ -338,7 +327,8 @@ class archetype(decklist):
     #FINISHED
     def averagedecklist(self):
         # Decklist object formed from the weighted subshares of decklists within the archetype.
-        return sum([deck * deck.subshare() for deck in self.sublists], NullObject())
+        return reduce((lambda x, y: x + y), [deck * deck.subshare() for deck in self.sublists])
+
 
 
 class metagame(dict):
@@ -448,8 +438,8 @@ if __name__ == '__main__':
 
     print 'running:', master["Modern"]["Jund"]["Abrupt Decay"]
 
-    print 'query:', master["Modern"].whatdeck({"Polluted Delta": 1})
+    print 'whatdeck:', master["Modern"].whatdeck({"Polluted Delta": 1})
 
-    print 'query:', master["Modern"].whatdeck({"Polluted Delta": 4})
+    print 'whatdeck:', master["Modern"].whatdeck({"Polluted Delta": 4})
 
-    print 'query:', master["Modern"].whatdeck({"Thalia, Guardian of Thraben": 2, "Thought-Knot Seer": 1})
+    print 'whatdeck:', master["Modern"].whatdeck({"Thalia, Guardian of Thraben": 2, "Thought-Knot Seer": 1})
