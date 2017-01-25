@@ -193,7 +193,7 @@ class Bot(object):
 
     def ping(self, response):
         #Checks IRC server response to see if it is a server ping. If it is a ping the bot pongs the server back.
-        if response == "PING :tmi.twitch.tv\r\n":
+        if "PING :tmi.twitch.tv" in response:
             self.send("PONG :tmi.twitch.tv\r\n")
             print "message  {} >> PONG\r\n".format(self.now())
             return True
