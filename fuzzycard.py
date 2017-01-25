@@ -1,117 +1,144 @@
-# Uses python-levenshtein module implicitly.
+# Import standard modules.
+from collections import namedtuple
 from fuzzywuzzy import fuzz
-
+# Import custom modules.
+import metagame
 import mtgjson
 
 
-import json
-f = open("metagameDict.json", 'r')
-metagameDict = json.loads(f.read())
-f.close()
+class ApproximateString(object):
+    def __init__(self, target, options):
+        self.string = target
+        self.options = options
+
+    def nearestobject(self):
+        return max(self.options)
+
+    def nearest(self):
+        return unicode(self.nearestobject())
+
+    def __str__(self):
+        return self.nearest()
+
+    __repr__ = __str__
 
 
-#FINISHED
-def flatten(inlist, level=float('inf')):
-    def isFlat(inlist):
-        for element in inlist:
-            if isinstance(element, list):
-                return False
-        return True
+class ProspectiveString(object):
+    def __init__(self, target, prospect, transformations=(), untransformed=None):
+        self.target = target
+        self.prospect = prospect
+        self.transformations = transformations
+        self.untransformed = untransformed
 
-    def makeFlatter(inlist):
-        outlist = []
-        for item in inlist:
-            if isinstance(item, list):
-                outlist += item
+    def score(self):
+        return fuzz.ratio(self.target, self.prospect)
+
+    def bestscore(self):
+        return max(transformed.score() for transformed in self.transform())
+
+    def transform(self):
+        transformed = [self]
+        for function in self.transformations:
+            nexttransformed = getattr(self, function)()
+            if isinstance(nexttransformed, list):
+                transformed += nexttransformed
             else:
-                outlist.append(item)
-        return outlist
+                transformed.append(nexttransformed)
+        return transformed
 
-    flatter = makeFlatter(inlist)
-    return flatter if isFlat(flatter) or not level-1 else flatten(flatter, level-1)
+    def getString(self):
+        return self.untransformed.prospect if self.untransformed else self.prospect
 
+    def __eq__(self, other):
+        return self.bestscore() == other.bestscore()
 
-#WORKING
-# If card name match ratios are tied, pick the card with the most metagame share.
-# (ratio, metagameshare, cardname)
-def cardPopularity(cardname):
-    pass
+    def __lt__(self, other):
+        return self.bestscore() < other.bestscore()
 
-#FINISHED
-def nearestString(query, options, transformations, method):
-    """
-    :param query: String that may or may not be an actual Magic card's name.
-    :param options: List of all Magic card names.
-    :param transformations: List of transformations of the options to compare with query string. Use best among ratios.
-    :param method: String name of fuzzywuzzy ratio method to use.
-    :return: The string among the options closest to the input string.
-    """
-    def ratiopair(query, option, transformed):
-        """
-        :param option: String element of optionlist.
-        :param transformed: String transformed from option by a transformation in transformations.
-        :return: Tuple (Ratio method output, option)
-        """
-        # When cardPopularity is done, it will be the second element of this tuple.
-        return (getattr(fuzz, method)(query.lower(), transformed.lower()), option)
-
-    # List of transformations on the options.
-    def comparelist(option):
-        """
-        :param option: String element of optionlist.
-        :return:
-        """
-        # For each transformation function, compute the transformed strings.
-        transformedlist = flatten([transformation(option) for transformation in transformations])
-
-        # For each transformed string, compare that string with the query string.
-        return [ratiopair(query, option, option)]\
-               + [ratiopair(query, option, transformed) for transformed in transformedlist]
-
-    ratingslist = [max(comparelist(option)) for option in options]
-    return max(ratingslist)[1]
+    def __str__(self):
+        return self.prospect
 
 
-#FINISHED
-def nearestDeckname(query):
+class ApproximateDeckname(ApproximateString):
+    def __init__(self, target, format_=None):
+        self.master = metagame.loadMetagameMaster("metagamemaster.p")
+        self.target = target
+        self.format_ = format_
+        self.options = self.getOptions()
+        ApproximateString.__init__(self, target=self.target, options=self.options)
 
-    archetypes = [metagame for metagame in metagameDict]
+    def getOptions(self):
+        if self.format_:
+            return [ProspectiveDeckname(target=self.target, prospect=archetype.archetype, format_=archetype.format_)
+                    for archetype in self.master[self.format_].archetypes()]
+        else:
+            return [ProspectiveDeckname(target=self.target, prospect=archetype.archetype, format_=archetype.format_)
+                    for archetype in self.master.archetypes()]
 
-    def aliases(option):
+    def nearestformat(self):
+        return self.nearestobject().format_
 
-        aliasedlist = [
-             ["Abzan", "Junk"],
-             ["Affinity", "Robots"],
-             ["Tron", "RG Tron"],
-             ["Suicide Zoo", "Death's Shadow Zoo"],
-             ["Abzan Company", "Melira Company", "Abzan CoCo"],
-             ["Merfolk", "Fish"],
-             ["Jeskai Control", "Nahiri Control", "Jeskai Nahiri"],
-             ["Hatebears", "Death and Taxes"]
-            ]
 
-        for aliased in aliasedlist:
-            if option in aliased:
-                return aliased
+class ProspectiveDeckname(ProspectiveString):
+    def __init__(self, target, prospect, format_, untransformed=None):
+        self.target = target
+        self.prospect = prospect
+        self.format_ = format_
+        self.untransformed = untransformed
+        self.transformations = ["_aliased"]
+        ProspectiveString.__init__(self, target=self.target, prospect=self.prospect, transformations=self.transformations)
 
-        # If option has no aliases.
+    def _aliased(self):
+        aliassets = [
+            ["Abzan", "Junk"],
+            ["Affinity", "Robots"],
+            ["Tron", "RG Tron"],
+            ["Suicide Zoo", "Death's Shadow Zoo", "Zooicide"],
+            ["Abzan Company", "Melira Company", "Abzan CoCo"],
+            ["Merfolk", "Fish"],
+            ["Jeskai Control", "Nahiri Control", "Jeskai Nahiri"],
+            ["Hatebears", "Death and Taxes"]
+        ]
+        for aliasset in aliassets:
+            if self.prospect in aliasset:
+                return [ProspectiveDeckname(target=self.target, prospect=deckname, format_=self.format_, untransformed=self)
+                        for deckname in aliasset]
         return []
 
-    return nearestString(query, options=archetypes, transformations=[aliases], method='partial_ratio')
 
 
-#FINISHED
-def nearestCardname(query):
+class ApproximateCardname(ApproximateString):
+    def __init__(self, target):
+        self.target = target
+        self.options = self.getOptions()
+        ApproximateString.__init__(self, target=self.target, options=self.options)
 
-    cardnames = mtgjson.cardnames
-
-    # The name of a legendary card without the epithet.
-    def legendname(cardname):
-        return cardname.split(',')[0]
-
-    return nearestString(query, options=cardnames, transformations=[legendname], method='ratio')
+    def getOptions(self):
+        return [ProspectiveCardname(target=self.target, prospect=cardname) for cardname in mtgjson.cardnames]
 
 
-#print nearestCardname('Litnin Bolt')
+class ProspectiveCardname(ProspectiveString):
+    def __init__(self, target, prospect, untransformed=None):
+        self.target = target
+        self.prospect = prospect
+        self.untransformed = untransformed
+        self.transformations = ["_noepithet"]
+        ProspectiveString.__init__(self, target=self.target, prospect=self.prospect, transformations=self.transformations)
 
-#print nearestDeckname("jesk nahiri")
+    def _noepithet(self):
+        if ',' in self.prospect:
+            epithetless = self.prospect.split(',', 1)[0]
+            return ProspectiveCardname(target=self.target, prospect=epithetless, untransformed=self)
+        else:
+            return []
+
+
+
+if __name__ == "__main__":
+    print ApproximateCardname("lightnng bolt")
+    print ApproximateCardname("ligni btot")
+    print ApproximateCardname("rago")
+    print ApproximateCardname("tramgoyf")
+
+    print ApproximateDeckname("junk", "Modern")
+    print ApproximateDeckname("mricls")

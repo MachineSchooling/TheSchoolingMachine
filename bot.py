@@ -1,14 +1,18 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+
 # Import standard modules.
 import os
 import time
 import datetime
 import socket
+import cPickle
 # Import custom modules.
-from mtgexceptions import CardError
-from mtgexceptions import DeckError
-import metagame
+from metagame import *
 import commands
 import private
+import mtgjson
 
 
 #FINISHED
@@ -19,61 +23,58 @@ class PRIVMSG(object):
         :param bot: Bot from which the PRIVMSG is received.
         :param string: Raw text sent by IRC server including the terminating newline characters.
         """
-
         # Bot which is processing the PRIVMSG. PRIVMSG uses the bot's .chat method.
         self.bot = bot
-
         # Raw is of the form ":NICK!NICK@NICK.tmi.twitch.tv PRIVMSG #CHAN :content"
         self.raw = string.strip('\r\n')
-
         # Parse the raw response to find the NICK, CHAN, and content of the response.
-        self.parse(self.raw)
-
+        self.NICK, self.CHAN, self.content = self.parseOrigin()
         # Output the parsed response to the console.
-        toconsole = "response {} << NICK: {}, CHAN: {}, CONTENT: {}\r\n"
-        print toconsole.format(self.bot.now(), self.NICK, self.CHAN, self.content)
+        toconsole = "response {} << CHAN: {}, NICK: {}, CONTENT: {}\r\n"
+        print toconsole.format(self.bot.now(), self.CHAN, self.NICK, self.content)
+
+        # Determine if the response contains a command.
+        self.command, self.args = self.parseCommand()
+        # If the response does contain a command, execute it.
+        if self.command:
+            try:
+                getattr(commands, self.command)(self)
+            except AttributeError:
+                pass
 
     #FINISHED
-    def parse(self, raw):
+    def parseOrigin(self):
         """
         :param raw: Raw text sent by IRC server minus the terminating newline characters
         :return list: List elements correspond to NICK, CHAN, and content of the response.
         """
         try:
             # IRC server data is encapsulated by semicolons. Response content follows.
-            data, content = [i for i in raw.lstrip(':').split(':', 1)]
+            data, content = [i for i in self.raw.lstrip(':').split(':', 1)]
             # Channel is what follows the '#' and has no spaces.
             _, CHAN = [i.strip() for i in data.split('#')]
             # NICK ends before the first '!'.
             NICK, _ = data.split('!')
 
-            self.NICK, self.CHAN, self.content = NICK, CHAN, content
+            return NICK, CHAN, content
+
         except ValueError:
             print "ValueError: {}".format(self.raw)
 
     #FINISHED
-    def commandQ(self):
-        # If the response doesn't begin with a '!' it is not a command.
-        if self.content[0] != '!':
-            return False
+    def parseCommand(self):
+        # Check if the response is in the format of a command.
+
+        content = self.content
+        if len(content) < 2 or content[0] != '!' or content[1] == '_':
+            command, args = None, None
         else:
-            # If the response is a command, the command call follows the '!' and ends before the first space.
-            command_args = self.content.lstrip('!').split(' ', 1)
-
-            # If the potential command has no arguments:
-            if len(command_args) == 1:
-                self.command = command_args[0]
-            # If the potential command has arguments:
-            else:
-                self.command, self.args = command_args
-
-        # See if the command call corresponds to a defined command.
-        try:
-            getattr(commands, self.command)(self)
-            return True
-        # If the response's text after the '!' and before the space isn't on the commands list, it is not a command.
-        except AttributeError:
-            return False
+            content = content.lstrip('!')
+            try:
+                command, args = content.split(' ', 1)
+            except ValueError:
+                command, args = content, None
+        return command, args
 
 
 
@@ -118,7 +119,7 @@ class personlist(object):
 
 #FINISHED
 # The main object that runs the bot, interfaces with the IRC, and calls helper programs.
-class bot(object):
+class Bot(object):
     def __init__(self, HOST, PORT, NICK, PASS):
         # Server id data.
         self.HOST = HOST  # Host Server
@@ -128,13 +129,13 @@ class bot(object):
         self.PASS = PASS  # Twitch Password
 
         # Maximum response read size.
-        self.SIZE = 2024
+        self.SIZE = 2**20
 
         # Network functions.
         self.socket = socket.socket()
         self.socket.connect((HOST, PORT))
-        self.socket.send("PASS {}\r\n".format(PASS).encode("utf-8"))
-        self.socket.send("NICK {}\r\n".format(NICK).encode("utf-8"))
+        self.send("PASS {}\r\n".format(PASS))
+        self.send("NICK {}\r\n".format(NICK))
 
         # Cooldown time between messages sent. 1 / Maximum messages per second. To avoid user spam and server bans.
         # 100messages/30seconds limit is iff you only message channels in which you are a moderator.
@@ -150,54 +151,50 @@ class bot(object):
         for CHAN in self.CHANlist:
             self.join(CHAN)
             time.sleep(self.joinCOOL)
-        print "\r\n"
 
-        # Last time metagame json file was updated.
+        # Launch the metagame master object.
+        self.masterfile = "metagamemaster.p"
+        # If the object already exists load it. Otherwise, make a new object.
         try:
-            self.lastupdate = os.path.getmtime("metagameDict.json")
+            print self.now(), ">>", "Loading metagame master.\r\n"
+            self.lastupdate = os.path.getmtime(self.masterfile)
+            self.master = loadMetagameMaster(self.masterfile)
+            print self.now(), ">>", "Metagame master loaded.\r\n"
         except OSError:
-            print "json file not found."
+            print self.now(), ">>", "Failed to load metagame master. Creating new metagame master.\r\n"
+            self.master = metagamemaster(self.masterfile)
+            self.lastupdate = os.path.getmtime(self.masterfile)
+            print self.now(), ">>", "New metagame master created.\r\n "
 
-        # Start the bot.
+        # Update the Magic card json.
+        self.json_update()
+
         self.mainLoop()
 
-    # Return the current date and time. Used for bot's log.
-    def now(self):
+    @staticmethod
+    def now():
         return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    def send(self, message):
+        #self.socket.send(message.encode("utf-8"))
+        self.socket.send(message)
 
-    # The bot joins the IRC channel CHAN.
     def join(self, CHAN):
-        self.socket.send("JOIN #{}\r\n".format(CHAN).encode("utf-8"))
+        self.send("JOIN #{}\r\n".format(CHAN))
         print "{} has joined {}'s channel\r\n".format(self.NICK, CHAN)
 
-
-    # The bot departs from the IRC channel CHAN.
     def part(self, CHAN):
-        self.socket.send("PART #{}\r\n".format(CHAN).encode("utf-8"))
+        self.send("PART #{}\r\n".format(CHAN))
         print "{} has departed from {}'s channel\r\n".format(self.NICK, CHAN)
 
-
-    #FINISHED
     def chat(self, CHAN, message):
-        """
-        Send a chat message to the server.
-        :param message: String. The message to be sent.
-        :return: None. A message is sent to the IRC server.
-        """
-        self.socket.send("PRIVMSG #{} :{}\r\n".format(CHAN, message).encode("utf-8"))
+        self.send("PRIVMSG #{} :{}\r\n".format(CHAN, message))
         print "message  {} >> {}\r\n".format(self.now(), message)
 
-
-    #FINISHED
     def ping(self, response):
-        """
-        Checks IRC server response to see if it is a server ping. If it is a ping the bot pongs the server back.
-        :param response: String received from the IRC server.
-        :return: True if a pong is sent to the IRC server. Else false.
-        """
+        #Checks IRC server response to see if it is a server ping. If it is a ping the bot pongs the server back.
         if response == "PING :tmi.twitch.tv\r\n":
-            self.socket.send("PONG :tmi.twitch.tv\r\n".encode("utf-8"))
+            self.send("PONG :tmi.twitch.tv\r\n")
             print "message  {} >> PONG\r\n".format(self.now())
             return True
         else:
@@ -205,13 +202,13 @@ class bot(object):
 
 
     #FINISHED
-    def metagameupdate(self, magicFormat="modern", medium="online", elapsed=60*60*24, start=0, end=24):
+    def metagameupdate(self, elapsed=60*60*24, start=0, end=24):
         """
-        Checks to see if metagameDict.json file is up to date and updates it if it isn't.
+        Checks to see if the metagame object is up to date and updates it if it isn't.
         :param elapsed: Seconds that have elapsed since last update needed to justify an update. (Default one day.)
         :param start: Beginning of range of hours in day to perform an update.
         :param end: End of range of hours in day to perform an update.
-        :return: True if json file is updated. Else false.
+        :return: True if metagame object is updated. Else false.
         """
         # Get current date-time.
         nowdate = time.time()
@@ -219,14 +216,18 @@ class bot(object):
         nowhour = int(time.strftime("%H"))
         # If enough time has elapsed since last update and it is currently within updating hours, update.
         if (nowdate - self.lastupdate > elapsed) and (start < nowhour < end):
-            print "json file is updating.\r\n"
-            metagame.jsonupdate(magicFormat=magicFormat, medium=medium)
+            print self.now(), ">>", "Metagame object is updating.\r\n"
+            self.master = metagamemaster(self.masterfile)
             self.lastupdate = nowdate
-            print "json file updated.\r\n"
+            print self.now(), ">>", "Metagame object updated.\r\n"
             return True
         else:
             return False
 
+    def json_update(self):
+        print self.now(), ">>", "MTGJSON is updating.\r\n"
+        mtgjson.json_update()
+        print self.now(), ">>", "MTGJSON updated.\r\n"
 
     def mainLoop(self):
         while True:
@@ -236,34 +237,35 @@ class bot(object):
             # Read next response from IRC.
             # Ignore messages with weird unicode characters.
             try:
-                response = self.socket.recv(self.SIZE).decode("utf-8")
+                # Multiple PRIVMSGs may be sent by the server in one response, but are separated by newlines.
+                responses = unicode(self.socket.recv(self.SIZE).decode("utf-8")).splitlines()
 
-                # Only one of the below functions should message the IRC server per loop to avoid server ban.
+                for response in responses:
+                    # Only one of the below functions should message the IRC server per loop to avoid server ban.
 
-                # If the response is a ping, pong back.
-                if self.ping(response):
-                    time.sleep(self.messageCOOL)
-                    continue
-
-                # See if the response is a PRIVMSG and if it is, see if it contains a command.
-                if "PRIVMSG" in response:
-                    res = PRIVMSG(bot=self, string=response)
-                    # If the response contains a command, call it and message the IRC back the output.
-                    if res.commandQ():
+                    # If the response is a ping, pong back.
+                    if self.ping(response):
                         time.sleep(self.messageCOOL)
                         continue
-                else:
-                    print "response {} << {}".format(self.now(), response)
+
+                    # See if the response is a PRIVMSG and if it is, see if it contains a command.
+                    if "PRIVMSG" in response:
+                        res = PRIVMSG(bot=self, string=response)
+                        # If the response contains a command, call it and message the IRC back the output.
+                        if res.command:
+                            time.sleep(self.messageCOOL)
+                            continue
+                    else:
+                        print "response {} << {}".format(self.now(), response)
 
             except UnicodeEncodeError:
                 print "Unicode character not recognized.\r\n"
-                continue
 
 
-
-TheSchoolingMachine = bot(
-    HOST="irc.chat.twitch.tv",
-    PORT=6667,
-    NICK="theschoolingmachine",
-    PASS=private.PASS
+if __name__ == "__main__":
+    TheSchoolingMachine = Bot(
+        HOST="irc.chat.twitch.tv",
+        PORT=6667,
+        NICK="theschoolingmachine",
+        PASS=private.PASS
     )
