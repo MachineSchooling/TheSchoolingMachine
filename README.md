@@ -11,22 +11,24 @@ Type this command in TheSchoolingMachine's Twitch chat (https://www.twitch.tv/ma
 
 Type this command in your channel's chat and the bot will stop responding to commands issued from your chat.
 
-!whatdeck CARDNAME
+!whatdeck {FORMAT=modern} {NUMBER=1} CARDNAME1, {NUMBER CARDNAME2}, {...}
 
-Provides the probabilities of which deck archetype has been encountered based on the cards played. Assumes that all cards in a deck are equally likely to be played.
+Provides the probabilities of which deck archetype has been encountered based on the cards played. Assumes that all cards in a deck are equally likely to be played. Inputs in brackets are optional. The default format is Modern.
 
-!running DECKNAME: CARDNAME
+!running {FORMAT} DECKNAME: CARDNAME
 
-Provides the expected number of a card played in a deck archetype in both the maindeck and sideboard.
+Provides the expected number of a card played in a deck archetype in both the maindeck and sideboard. Format specification is optional; the bot will try to guess the format from the deckname.
+
+!decklist {FORMAT} DECKNAME
+
+Provides a link to the MTGGoldfish listing for the deck. Format specification is optional; the bot will try to guess the format from the deckname.
 
 # Directory:
 The bot object that interfaces with Twitch IRC is located in bot.py.
 
 The commands that the bot will respond to from Twitch IRC users are located in commands.py.
 
-The program to create the metagame dictionary (metagmaeDict.json) from MTGGoldfish.com's metagame data is located in metagame.py.
-
-The program that provides the machinery for the "!whatdeck" and "!running" commands, as well as anything else that relies on metagame data, is located in metagameanalysis.py.
+The program to create the metagame object from MTGGoldfish.com's metagame data is located in metagame.py. It also contains the machinery for the "!whatdeck" and "!running" commands, as well as anything else that relies on metagame data.
 
 Custom exceptions related to cards or metagame archetypes are located in mtgexceptions.py.
 
