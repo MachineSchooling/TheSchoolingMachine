@@ -1,13 +1,8 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
-
-
 # Import standard modules.
-import os
 import time
 import datetime
 import socket
-import cPickle
+from parse import *
 # Import custom modules.
 from metagame import *
 import commands
@@ -15,57 +10,50 @@ import private
 import mtgjson
 
 
-#FINISHED
-# PRIVMSG (private message) object which unpacks the data from a received IRC message.
-class PRIVMSG(object):
-    def __init__(self, bot, string):
-        """
-        :param bot: Bot from which the PRIVMSG is received.
-        :param string: Raw text sent by IRC server including the terminating newline characters.
-        """
-        # Bot which is processing the PRIVMSG. PRIVMSG uses the bot's .chat method.
+class Response(object):
+    def __init__(self, bot, raw):
         self.bot = bot
-        # Raw is of the form ":NICK!NICK@NICK.tmi.twitch.tv PRIVMSG #CHAN :content"
-        self.raw = string.strip('\r\n')
-        # Parse the raw response to find the NICK, CHAN, and content of the response.
-        self.NICK, self.CHAN, self.content = self.parseOrigin()
-        # Output the parsed response to the console.
-        toconsole = "response {} << CHAN: {}, NICK: {}, CONTENT: {}\r\n"
-        print toconsole.format(self.bot.now(), self.CHAN, self.NICK, self.content)
+        self.raw = raw
 
-        # Determine if the response contains a command.
-        self.command, self.args = self.parseCommand()
-        # If the response does contain a command, execute it.
+        self.parse_ping()
+        self.parse_PRIVMSG()
+
+    def parse_ping(self):
+        if self.raw == "PING :tmi.twitch.tv":
+            self.bot.pong()
+            return True
+        else:
+            return False
+
+    def parse_PRIVMSG(self):
+        try:
+            pattern = ":{NICK}!{NICK}@{NICK}.tmi.twitch.tv PRIVMSG #{CHAN} :{CONTENT}"
+            parsed = parse(pattern, self.raw)
+            PRIVMSG(bot=self.bot, NICK=parsed["NICK"], CHAN=parsed["CHAN"], CONTENT=parsed["CONTENT"])
+            return True
+        except TypeError:
+            return False
+
+
+class PRIVMSG(object):
+    def __init__(self, bot, NICK, CHAN, CONTENT):
+        self.bot = bot
+        self.NICK = NICK
+        self.CHAN = CHAN
+        self.CONTENT = CONTENT
+
+        self.bot.console(u"CHAN: {}, NICK: {}, CONTENT: {}".format(self.CHAN, self.NICK, self.CONTENT), mode="In")
+
+        self.command, self.args = self.parse_command()
+
         if self.command:
             try:
                 getattr(commands, self.command)(self)
             except AttributeError:
                 pass
 
-    #FINISHED
-    def parseOrigin(self):
-        """
-        :param raw: Raw text sent by IRC server minus the terminating newline characters
-        :return list: List elements correspond to NICK, CHAN, and content of the response.
-        """
-        try:
-            # IRC server data is encapsulated by semicolons. Response content follows.
-            data, content = [i for i in self.raw.lstrip(':').split(':', 1)]
-            # Channel is what follows the '#' and has no spaces.
-            _, CHAN = [i.strip() for i in data.split('#')]
-            # NICK ends before the first '!'.
-            NICK, _ = data.split('!')
-
-            return NICK, CHAN, content
-
-        except ValueError:
-            print "ValueError: {}".format(self.raw)
-
-    #FINISHED
-    def parseCommand(self):
-        # Check if the response is in the format of a command.
-
-        content = self.content
+    def parse_command(self):
+        content = self.CONTENT
         if len(content) < 2 or content[0] != '!' or content[1] == '_':
             command, args = None, None
         else:
@@ -77,10 +65,9 @@ class PRIVMSG(object):
         return command, args
 
 
+class PersonList(object):
+    # PersonList class is for maintaining lists of user, e.g., broadcaster channels or bot admins
 
-#FINISHED
-# personlist class is for maintaining lists of user, e.g., broadcaster channels or bot admins
-class personlist(object):
     def __init__(self, file):
         self.file = file
         self.memberlist = self.load(self.file)
@@ -117,10 +104,12 @@ class personlist(object):
         return True
 
 
-#FINISHED
-# The main object that runs the bot, interfaces with the IRC, and calls helper programs.
 class Bot(object):
+    # The main object that runs the bot, interfaces with the IRC, and calls helper programs.
+
     def __init__(self, HOST, PORT, NICK, PASS):
+        print "="+"Loading".ljust(100, "=")
+
         # Server id data.
         self.HOST = HOST  # Host Server
         self.PORT = PORT  # IRC Port
@@ -147,7 +136,7 @@ class Bot(object):
         self.joinCOOL = 15.0 / 50.0
 
         # Join each channel in list of users.
-        self.CHANlist = personlist("users.txt")
+        self.CHANlist = PersonList("users.txt")
         for CHAN in self.CHANlist:
             self.join(CHAN)
             time.sleep(self.joinCOOL)
@@ -156,53 +145,53 @@ class Bot(object):
         self.masterfile = "metagamemaster.p"
         # If the object already exists load it. Otherwise, make a new object.
         try:
-            print self.now(), ">>", "Loading metagame master.\r\n"
+            self.console("Loading metagame master.")
             self.lastupdate = os.path.getmtime(self.masterfile)
-            self.master = loadMetagameMaster(self.masterfile)
-            print self.now(), ">>", "Metagame master loaded.\r\n"
+            self.master = load_metagamemaster(self.masterfile)
+            self.console("Metagame master loaded.")
         except OSError:
-            print self.now(), ">>", "Failed to load metagame master. Creating new metagame master.\r\n"
-            self.master = metagamemaster(self.masterfile)
+            self.console("Failed to load metagame master. Creating new metagame master.")
+            self.master = MetagameMaster(self.masterfile)
             self.lastupdate = os.path.getmtime(self.masterfile)
-            print self.now(), ">>", "New metagame master created.\r\n "
+            self.console("New metagame master created.")
 
         # Update the Magic card json.
-        self.json_update()
+        self.update_json()
 
-        self.mainLoop()
+        print "="+"Online".ljust(100, "=")
+
+        self.main_loop()
 
     @staticmethod
     def now():
         return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    def console(self, message, mode="Out"):
+        direction = "<<" if mode == "In" else ">>"
+        print self.now(), direction, message
+
     def send(self, message):
-        #self.socket.send(message.encode("utf-8"))
         self.socket.send(message)
 
     def join(self, CHAN):
         self.send("JOIN #{}\r\n".format(CHAN))
-        print "{} has joined {}'s channel\r\n".format(self.NICK, CHAN)
+        self.console("{} has joined {}'s channel".format(self.NICK, CHAN))
 
     def part(self, CHAN):
         self.send("PART #{}\r\n".format(CHAN))
-        print "{} has departed from {}'s channel\r\n".format(self.NICK, CHAN)
+        self.console("{} has departed from {}'s channel".format(self.NICK, CHAN))
 
     def chat(self, CHAN, message):
         self.send("PRIVMSG #{} :{}\r\n".format(CHAN, message))
-        print "message  {} >> {}\r\n".format(self.now(), message)
+        self.console("CHAN: {}, MESSAGE: {}".format(CHAN, message))
 
-    def ping(self, response):
-        #Checks IRC server response to see if it is a server ping. If it is a ping the bot pongs the server back.
-        if "PING :tmi.twitch.tv" in response:
-            self.send("PONG :tmi.twitch.tv\r\n")
-            print "message  {} >> PONG\r\n".format(self.now())
-            return True
-        else:
-            return False
+    def pong(self, ):
+        self.send("PONG :tmi.twitch.tv\r\n")
+        self.console("PONG")
 
 
     #FINISHED
-    def metagameupdate(self, elapsed=60*60*24, start=0, end=24):
+    def update_metagame(self, elapsed=60*60*24, start=0, end=24):
         """
         Checks to see if the metagame object is up to date and updates it if it isn't.
         :param elapsed: Seconds that have elapsed since last update needed to justify an update. (Default one day.)
@@ -216,23 +205,23 @@ class Bot(object):
         nowhour = int(time.strftime("%H"))
         # If enough time has elapsed since last update and it is currently within updating hours, update.
         if (nowdate - self.lastupdate > elapsed) and (start < nowhour < end):
-            print self.now(), ">>", "Metagame object is updating.\r\n"
-            self.master = metagamemaster(self.masterfile)
+            self.console("Metagame object is updating.")
+            self.master = MetagameMaster(self.masterfile)
             self.lastupdate = nowdate
-            print self.now(), ">>", "Metagame object updated.\r\n"
+            self.console("Metagame object updated.")
             return True
         else:
             return False
 
-    def json_update(self):
-        print self.now(), ">>", "MTGJSON is updating.\r\n"
-        mtgjson.json_update()
-        print self.now(), ">>", "MTGJSON updated.\r\n"
+    def update_json(self):
+        self.console("MTGJSON is updating.")
+        mtgjson.update()
+        self.console("MTGJSON updated.")
 
-    def mainLoop(self):
+    def main_loop(self):
         while True:
             # See if metagame data needs to be updated and if so do it.
-            self.metagameupdate()
+            self.update_metagame()
 
             # Read next response from IRC.
             # Ignore messages with weird unicode characters.
@@ -241,25 +230,10 @@ class Bot(object):
                 responses = unicode(self.socket.recv(self.SIZE).decode("utf-8")).splitlines()
 
                 for response in responses:
-                    # Only one of the below functions should message the IRC server per loop to avoid server ban.
-
-                    # If the response is a ping, pong back.
-                    if self.ping(response):
-                        time.sleep(self.messageCOOL)
-                        continue
-
-                    # See if the response is a PRIVMSG and if it is, see if it contains a command.
-                    if "PRIVMSG" in response:
-                        res = PRIVMSG(bot=self, string=response)
-                        # If the response contains a command, call it and message the IRC back the output.
-                        if res.command:
-                            time.sleep(self.messageCOOL)
-                            continue
-                    else:
-                        print "response {} << {}".format(self.now(), response)
+                    Response(self, response)
 
             except UnicodeEncodeError:
-                print "Unicode character not recognized.\r\n"
+                self.console("Unicode character not recognized.")
 
 
 if __name__ == "__main__":

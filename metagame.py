@@ -6,6 +6,7 @@ import bisect
 import cPickle
 import os
 import sys
+import time
 from collections import namedtuple
 from scipy.stats import hypergeom
 # Import custom modules.
@@ -70,41 +71,32 @@ def plausibile(intable, maxrows=5, threshold=.05):
 
 
 
-class card(dict):
-    #FINISHED
+class Card(dict):
     def __init__(self, name, number=0, percent=1):
         self.name = name
         self[number] = percent
         if number != 0:
             self[0] = 1 - percent
 
-    #FINISHED
     def __missing__(self, key):
         return 0
 
-    #FINISHED
     def __lt__(self, other):
         return self.average() < other.average()
 
-    #FINISHED
     def __str__(self):
         return "{} {}".format(self.average(), self.name)
 
-    #FINISHED
     __repr__ = __str__
-    #def __repr__(self):
-    #    return str(self.average())
 
-    #FINISHED
     def average(self):
         return reduce((lambda x, y: x + y), [number * self[number] for number in self])
 
-    #FINISHED
     def __add__(self, other):
         if not self.name == other.name:
             raise CardError("Cards with different names can't be combined.")
 
-        outcard = card(name=self.name)
+        outcard = Card(name=self.name)
 
         for number in set(self.keys()) | set(other.keys()):
             outcard[number] = self[number] + other[number]
@@ -113,9 +105,8 @@ class card(dict):
 
     __radd__ = __add__
 
-    # FINISHED
     def __mul__(self, scalar):
-        outcard = card(name=self.name)
+        outcard = Card(name=self.name)
 
         for number in self.keys():
             outcard[number] = self[number] * scalar
@@ -125,19 +116,15 @@ class card(dict):
     __rmul__ = __mul__
 
 
-class board(dict):
-    #FINISHED
+class Board(dict):
     def size(self):
-        #return sum(self.values())
         return sum(self[card].average() for card in self)
 
-    #FINISHED
     def __missing__(self, key):
-        return card(name=key)
+        return Card(name=key)
 
-    #FINISHED
     def __add__(self, other):
-        outboard = board()
+        outboard = Board()
 
         for cardname in set(self) | set(other):
             outboard[cardname] = self[cardname] + other[cardname]
@@ -146,9 +133,8 @@ class board(dict):
 
     __radd__ = __add__
 
-    #FINISHED
     def __mul__(self, scalar):
-        outboard = board()
+        outboard = Board()
 
         for cardname in self:
             outboard[cardname] = self[cardname] * scalar
@@ -158,12 +144,12 @@ class board(dict):
     __rmul__ = __mul__
 
 
-class decklist(object):
+class Decklist(object):
     def __init__(self, archetype, url=None, rawshare=0):
         self.url = url
         self.archetype = archetype
-        self.main = board()
-        self.side = board()
+        self.main = Board()
+        self.side = Board()
         self.rawshare = rawshare # raw share of decklist in metagame
         self.populate()
 
@@ -206,9 +192,9 @@ class decklist(object):
 
                     # Insert the decklist data into the metagame differentiating between the maindeck/sideboard cards.
                     if cardTypeSubsection.find('h4').contents[0] != "Sideboard":
-                        self.main[cardName] = card(cardName, cardQuantity, cardFreqency)
+                        self.main[cardName] = Card(cardName, cardQuantity, cardFreqency)
                     else:
-                        self.side[cardName] = card(cardName, cardQuantity, cardFreqency)
+                        self.side[cardName] = Card(cardName, cardQuantity, cardFreqency)
                 except AttributeError:
                     pass
 
@@ -221,14 +207,13 @@ class decklist(object):
 
                     # Insert the decklist data into the metagame differentiating between the maindeck/sideboard cards.
                     if cardTypeSubsection.find('h4').contents[0] != "Sideboard":
-                        self.main[cardName] = card(cardName, cardQuantity, cardFreqency)
+                        self.main[cardName] = Card(cardName, cardQuantity, cardFreqency)
                     else:
-                        self.side[cardName] = card(cardName, cardQuantity, cardFreqency)
+                        self.side[cardName] = Card(cardName, cardQuantity, cardFreqency)
                 except AttributeError:
                     pass
 
 
-    #WORKING
     def thisdeck(self, carddict):
         querysize = sum(carddict.values())
         decksize = int(self.main.size())
@@ -253,22 +238,16 @@ class decklist(object):
     def __getitem__(self, item):
         return {'maindeck': self.main[item], 'sideboard': self.side[item]}
 
-    """
-    def __iter__(self):
-        return iter(self.cards())
-    """
-
     def __str__(self):
         return str({'maindeck': self.main, 'sideboard': self.side})
 
     __repr__ = __str__
 
-    #WORKING
     def __add__(self, other):
         if not self.archetype is other.archetype:
             raise DeckError("Decklists of different archetypes can't be combined.")
 
-        outdecklist = decklist(archetype=self.archetype, rawshare=self.rawshare + other.rawshare)
+        outdecklist = Decklist(archetype=self.archetype, rawshare=self.rawshare + other.rawshare)
 
         outdecklist.main = self.main + other.main
         outdecklist.side = self.side + other.side
@@ -277,9 +256,8 @@ class decklist(object):
 
     __radd__ = __add__
 
-    # WORKING
     def __mul__(self, scalar):
-        outdecklist = decklist(archetype=self.archetype, rawshare=self.rawshare*scalar)
+        outdecklist = Decklist(archetype=self.archetype, rawshare=self.rawshare*scalar)
 
         outdecklist.main = self.main * scalar
         outdecklist.side = self.side * scalar
@@ -289,14 +267,14 @@ class decklist(object):
     __rmul__ = __mul__
 
 
-class archetype(decklist):
+class Archetype(Decklist):
     def __init__(self, metagame, name):
         self.archetype = self
         self.name = name
         self.metagame = metagame
         self.sublists = []
-        self.main = board()
-        self.side = board()
+        self.main = Board()
+        self.side = Board()
 
     # FINISHED
     def insort(self, item):
@@ -310,33 +288,29 @@ class archetype(decklist):
         # Add the decklist to the archetype's list of decklists.
         bisect.insort(self.sublists, item)
 
-    # FINISHED
     def rawshare(self):
         return sum(sublist.rawshare for sublist in self.sublists)
 
     def subshare(self):
         return 1
 
-    #FINISHED
     def share(self):
         try:
             return self.rawshare() / self.metagame.accounted()
         except ZeroDivisionError:
             return 0
 
-    # FINISHED
     def url(self):
         # Use only insort to insert into the archetype so the largest share decklist is always last.
         return self.sublists[-1].url
 
-    #FINISHED
     def averagedecklist(self):
         # Decklist object formed from the weighted subshares of decklists within the archetype.
         return reduce((lambda x, y: x + y), [deck * deck.subshare() for deck in self.sublists])
 
 
 
-class metagame(dict):
+class Metagame(dict):
     def __init__(self, format_):
         self.format_ = format_
         self.populate()
@@ -367,7 +341,7 @@ class metagame(dict):
 
                 # If no other archetype tiles have this one's name, create its listing.
                 if archetypeName not in self:
-                    currentArchetype = archetype(metagame=self, name=archetypeName)
+                    currentArchetype = Archetype(metagame=self, name=archetypeName)
                     self[archetypeName] = currentArchetype
                 else:
                     currentArchetype = self[archetypeName]
@@ -376,13 +350,12 @@ class metagame(dict):
 
                 # Create the listing for the decklist in the dict.
                 currentArchetype.insort(
-                    decklist(archetype=currentArchetype, url=archetypeURL, rawshare=archetypePercent)
+                    Decklist(archetype=currentArchetype, url=archetypeURL, rawshare=archetypePercent)
                     )
             except TypeError:
                 pass
 
 
-    #WORKING
     def whatdeck(self, carddict):
         rawProbabilities = {archetype: self[archetype].thisdeck(carddict) * self[archetype].share()
                             for archetype in self}
@@ -404,12 +377,12 @@ class metagame(dict):
         return [formatarchetype(self.format_, archetype) for archetype in self]
 
 
-class metagamemaster(dict):
+class MetagameMaster(dict):
     def __init__(self, masterfile):
         self.masterfile = masterfile
         self.formats = ["Standard", "Modern", "Legacy", "Vintage", "Pauper"]
         for format_ in self.formats:
-            self[format_] = metagame(format_)
+            self[format_] = Metagame(format_)
         self.pickle()
 
     def pickle(self):
@@ -431,7 +404,7 @@ class metagamemaster(dict):
         return [formatarchetype(format_, archetype) for format_ in self for archetype in self[format_]]
 
 
-def loadMetagameMaster(masterfile):
+def load_metagamemaster(masterfile):
     f = open(masterfile, 'rb')
     out = cPickle.load(f)
     f.close()
@@ -441,15 +414,15 @@ def loadMetagameMaster(masterfile):
 if __name__ == '__main__':
     m = "metagamemaster.p"
 
-    """
-    start = time.time()
-    master = metagamemaster(m)
-    master.pickle()
-    end = time.time()
-    print 'Timing:', end - start
-    """
+    recalculate = True
+    if recalculate:
+        start = time.time()
+        master = MetagameMaster(m)
+        master.pickle()
+        end = time.time()
+        print 'Timing:', end - start
 
-    master = loadMetagameMaster(m)
+    master = load_metagamemaster(m)
 
     print 'running:', master["Modern"]["Jund"]["Lightning Bolt"]
     print 'running:', master["Modern"]["Affinity"]["Cranial Plating"]

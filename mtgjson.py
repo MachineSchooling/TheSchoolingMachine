@@ -1,10 +1,8 @@
-import os
 import urllib
 import zipfile
 import json
 from pprint import pprint
 
-# Open .json file as python data.
 carddata = json.load(open("AllCards.json", 'r'))
 
 def english_form(string):
@@ -25,19 +23,17 @@ def english_form(string):
     return string
 
 
-def json_update():
+def update():
     urllib.urlretrieve("http://mtgjson.com/json/AllCards.json.zip", "AllCards.json.zip")
 
     with zipfile.ZipFile("AllCards.json.zip") as jzip:
         jzip.extractall()
 
 
-# List of names of every Magic card.
-# Replace retired non-English characters from old cards with their normal English counterparts.
 cardnames = [english_form(card.encode('utf-8')) for card in carddata]
 
 if __name__ == '__main__':
-    json_update()
+    update()
     pprint(cardnames)
 
     print "Cathartic Reunion" in cardnames

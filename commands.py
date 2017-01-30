@@ -15,12 +15,10 @@ class _Command(object):
     def chat(self, message):
         return self.bot.chat(CHAN=self.CHAN, message=message)
 
-    def hasArgs(self):
-        return bool(self.args)
 
     #Parsing format####################
 
-    def firstArg(self):
+    def first_arg(self):
         try:
             first, _ = self.args.split(" ", 1)
         except ValueError:
@@ -28,8 +26,8 @@ class _Command(object):
         return first
 
     def parse_format(self, default=None):
-        firstArg = self.firstArg().capitalize()
-        return firstArg if firstArg in self.bot.master.formats else default
+        first_arg = self.first_arg().capitalize()
+        return first_arg if first_arg in self.bot.master.formats else default
 
 
     #Parsing list strings####################
@@ -178,6 +176,7 @@ class running(_Command):
 
         rawmessage = "{} {} runs an average of {} in the maindeck and {} in the sideboard."
         message = rawmessage.format(format_, archetype, quantity["maindeck"], quantity["sideboard"])
+
         self.chat(message)
 
 

@@ -61,7 +61,7 @@ class ProspectiveString(object):
 
 class ApproximateDeckname(ApproximateString):
     def __init__(self, target, format_=None):
-        self.master = metagame.loadMetagameMaster("metagamemaster.p")
+        self.master = metagame.load_metagamemaster("metagamemaster.p")
         self.target = target
         self.format_ = format_
         self.options = self.getOptions()
@@ -142,3 +142,5 @@ if __name__ == "__main__":
 
     print ApproximateDeckname("junk", "Modern")
     print ApproximateDeckname("mricls")
+
+    print ApproximateDeckname('affinity', None)
