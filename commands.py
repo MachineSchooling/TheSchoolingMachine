@@ -1,5 +1,6 @@
 # Import standard modules.
 from parse import *
+import requests
 # Import custom modules.
 from fuzzycard import ApproximateCardname, ApproximateDeckname
 import mtgexceptions
@@ -23,8 +24,11 @@ class _Command(object):
     def chat(self, message):
         return self.bot.chat(CHAN=self.CHAN, message=message)
 
+    def console(self, message, mode='Out'):
+        return self.bot.console(message=message, mode=mode)
+
     def pattern(self):
-        pass
+        return ""
 
     def main(self):
         pass
@@ -36,21 +40,23 @@ class _Command(object):
         else:
             return parsed
 
+    def error_pattern(self):
+        return self.pattern()
+
     def error_message(self):
-        return "Error"
+        rawmessage = "Could not understand command. Command should be formatted as: !{} {}"
+        return rawmessage.format(type(self).__name__, self.error_pattern())
 
     #INCOMPLETE
-    def user_privilege(self):
-        if self.NICK in self.bot.administrators:
-            return "Administrator"
-        elif self.NICK == self.CHAN:
-            return "Broadcaster"
-        elif self.NICK in self.CHAN.moderators:
-            return "Moderator"
-        elif False:
-            return "Subscriber"
-        else:
-            return "Viewer"
+    def user_privileges(self):
+        privileges = {}
+        privileges["BotAdministrator"] = self.NICK in self.bot.administrators
+        privileges["Broadcaster"] = self.NICK == self.CHAN
+        privileges["Moderator"] = False #self.NICK in self.CHAN.moderators
+        privileges["Subscriber"] = False
+        privileges["Follower"] = False
+        privileges["Viewer"] = True
+        return privileges
 
     #Parsing format#####################################################################################################
 
@@ -58,19 +64,13 @@ class _Command(object):
         try:
             first, _ = self.args.split(" ", 1)
         except ValueError:
-            first = None
+            first = self.args
         return first
 
     def parse_format(self, default=None):
         first_arg = self.first_arg().capitalize()
-        return first_arg if first_arg in self.bot.master.formats else default
-
-    def get_format(self, default):
-        try:
-            return self.parsed("format_").capitalize()
-        except KeyError:
-            return default
-
+        format_ = first_arg if first_arg in self.bot.master.formats else default
+        return format_
 
     #Parsing list strings###############################################################################################
 
@@ -89,7 +89,6 @@ class _Command(object):
         rawdict = self.parse_quantity_string(cardliststring)
         carddict = {unicode(ApproximateCardname(key)): rawdict[key] for key in rawdict}
         #carddict = {ApproximateCardname(key): rawdict[key] for key in rawdict}
-
         return carddict
 
     def parse_number(self, quantityliststring):
@@ -153,14 +152,13 @@ class join(_Command):
         if self.PRIVMSG.CHAN == self.bot.NICK:
 
             if self.bot.CHANlist.addperson(self.NICK):
+                self.bot.join(self.NICK)
                 message = "{} has joined {}'s channel.".format(self.bot.NICK, self.NICK)
+
             else:
                 message = "{} has already joined {}'s channel.".format(self.bot.NICK, self.NICK)
 
             self.chat(message)
-
-    def error_message(self):
-        return
 
 
 class part(_Command):
@@ -189,23 +187,31 @@ class whatdeck(_Command):
         format_ = self.parse_format()
 
         if format_:
-            pattern = "{format_} {cardstring}"
+            pattern = "{format} {cardstring}"
         else:
             pattern = "{cardstring}"
 
         return pattern
 
+    def error_pattern(self):
+        cardlist_pattern = "{N1 card1}, {N2 card2},..."
+
+        format_ = self.parse_format()
+        if format_:
+            return "{format} " + cardlist_pattern
+        else:
+            return cardlist_pattern
+
     def main(self):
-
-
         parsed = self.parsed()
 
         cardstring = parsed["cardstring"]
+
         carddict = self.parse_cards_string(cardstring)
 
         dictstring = ", ".join(str(carddict[cardname]) + ' ' + str(cardname) for cardname in carddict)
 
-        format_ = self.get_format(default="Modern")
+        format_ = self.parse_format(default="Modern")
 
         probabilities_table = self.bot.master.whatdeck(format_=format_, carddict=carddict)
 
@@ -227,7 +233,7 @@ class running(_Command):
         format_ = self.parse_format()
 
         if format_:
-            pattern = "{format_} {archetype}: {cardname}"
+            pattern = "{format} {archetype}: {cardname}"
         else:
             pattern = "{archetype}: {cardname}"
 
@@ -236,7 +242,7 @@ class running(_Command):
     def main(self):
         parsed = parse(self.pattern(), self.args)
 
-        format_ = self.get_format(default=None)
+        format_ = self.parse_format(default=None)
 
         archetype = ApproximateDeckname(parsed['archetype'], format_)
         deckname = archetype.nearest()
@@ -260,16 +266,16 @@ class decklist(_Command):
         format_ = self.parse_format()
 
         if format_:
-            pattern = "{format_} {archetype}"
+            pattern = "{format} {archetype}"
         else:
             pattern = "{archetype}"
 
         return pattern
 
     def main(self):
-        format_ = self.get_format(None)
+        format_ = self.parse_format(None)
 
-        archetype = ApproximateDeckname(self.parsed('archetype'), self.parsed("format_"))
+        archetype = ApproximateDeckname(self.parsed('archetype'), format_)
         deckname = archetype.nearest()
         format_ = archetype.nearestformat()
 
@@ -277,4 +283,27 @@ class decklist(_Command):
 
         rawmessage = "The most popular decklist for {} {} can be found here: {}"
         message = rawmessage.format(format_, deckname, url)
+        self.chat(message)
+
+
+#Utility commands#######################################################################################################
+
+class pronounce(_Command):
+    def __init__(self, PRIVMSG):
+        _Command.__init__(self, PRIVMSG)
+
+    def pattern(self):
+        pattern = "{word}"
+        return pattern
+
+    def main(self):
+        word = self.parsed("word").lower()
+
+        url = "http://dictionary.cambridge.org/us/pronunciation/english/" + word.replace(' ', '-')
+
+        if requests.get(url).url == url:
+            message = "Pronunciation for \"{}\" can be found at: {}".format(word, url)
+        else:
+            message = "No pronunciation for \"{}\" found.".format(word)
+
         self.chat(message)
