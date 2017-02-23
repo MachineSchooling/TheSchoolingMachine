@@ -19,7 +19,7 @@ sys.setrecursionlimit(10000)
 
 
 
-def stringTryToFloat(x):
+def string_try_to_float(x):
     # Converts MTGGoldfish reported data into floats if they're numbers.
     try:
         return float(x)
@@ -29,14 +29,14 @@ def stringTryToFloat(x):
         except ValueError:
             return x
 
-def cleanName(name):
+def clean_name(name):
     # Takes a cardname with art specification and returns just the card's name. (Removes everything in parentheses.)
     regexDel = "\(([^\)]+)\)"
     return str(re.sub(regexDel, "", name).strip())
 
-def cleanNumber(number):
+def clean_number(number):
     # Cleans up whitespace and NUMx from MTGGoldfish HTML and converts to float.
-    return stringTryToFloat(number.strip().strip('x'))
+    return string_try_to_float(number.strip().strip('x'))
 
 
 def percent(float, decimals=0):
@@ -85,7 +85,7 @@ class Card(dict):
         return self.average() < other.average()
 
     def __str__(self):
-        return "{} {}".format(self.average(), self.name)
+        return "{} {}".format(humanform(self.average()), self.name)
 
     __repr__ = __str__
 
@@ -185,10 +185,10 @@ class Decklist(object):
             for featured in cardTypeSubsection.find_all('div', class_="archetype-breakdown-featured-card"):
                 try:
                     # Collect the decklist data from MTGGoldfish.
-                    cardName = cleanName(featured.find('img')['alt'])
+                    cardName = clean_name(featured.find('img')['alt'])
                     freqqty = featured.find('p', class_="archetype-breakdown-featured-card-text").contents[0]
-                    cardFreqency = cleanNumber(re.search("[0-9]+%", freqqty).group(0))
-                    cardQuantity = int(cleanNumber(re.search("[0-9]+x", freqqty).group(0)))
+                    cardFreqency = clean_number(re.search("[0-9]+%", freqqty).group(0))
+                    cardQuantity = int(clean_number(re.search("[0-9]+x", freqqty).group(0)))
 
                     # Insert the decklist data into the metagame differentiating between the maindeck/sideboard cards.
                     if cardTypeSubsection.find('h4').contents[0] != "Sideboard":
@@ -201,9 +201,9 @@ class Decklist(object):
             for unfeatured in cardTypeSubsection.find_all('tr'):
                 try:
                     # Collect the decklist data from MTGGoldfish.
-                    cardName = cleanName(unfeatured.find('a').contents[0])
-                    cardFreqency = cleanNumber(unfeatured.find('td', class_="deck-col-frequency").contents[0])
-                    cardQuantity = int(cleanNumber(unfeatured.find('td', class_="deck-col-qty").contents[0]))
+                    cardName = clean_name(unfeatured.find('a').contents[0])
+                    cardFreqency = clean_number(unfeatured.find('td', class_="deck-col-frequency").contents[0])
+                    cardQuantity = int(clean_number(unfeatured.find('td', class_="deck-col-qty").contents[0]))
 
                     # Insert the decklist data into the metagame differentiating between the maindeck/sideboard cards.
                     if cardTypeSubsection.find('h4').contents[0] != "Sideboard":
@@ -330,7 +330,7 @@ class Metagame(dict):
                 # Collect the archetype data from MTGGoldfish.
 
                 # Archetype tile metagame share as it appears on main metagame page.
-                archetypePercent = stringTryToFloat(
+                archetypePercent = string_try_to_float(
                     (archetypeTile.find(class_="percentage col-freq").contents[0]).strip('\n'))
                 # Archetype tile url. (url is non-unique for archetype names.)
                 archetypeLink = archetypeTile.find('a', class_="card-image-tile-link-overlay")["href"]
@@ -414,7 +414,7 @@ def load_metagamemaster(masterfile):
 if __name__ == '__main__':
     m = "metagamemaster.p"
 
-    recalculate = True
+    recalculate = False
     if recalculate:
         start = time.time()
         master = MetagameMaster(m)
