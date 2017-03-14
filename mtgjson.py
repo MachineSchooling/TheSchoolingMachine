@@ -1,9 +1,9 @@
 import urllib
 import zipfile
 import json
+import os.path
 from pprint import pprint
 
-carddata = json.load(open("AllCards.json", 'r'))
 
 def english_form(string):
     replacelist = [
@@ -23,13 +23,20 @@ def english_form(string):
     return string
 
 
-def update():
-    urllib.urlretrieve("http://mtgjson.com/json/AllCards.json.zip", "AllCards.json.zip")
+def update(filename="AllCards.json"):
+    zipfilename = filename + ".zip"
 
-    with zipfile.ZipFile("AllCards.json.zip") as jzip:
+    urllib.urlretrieve("http://mtgjson.com/json/" + zipfilename, zipfilename)
+
+    with zipfile.ZipFile(zipfilename) as jzip:
         jzip.extractall()
 
 
+if not os.path.exists("AllCards.json"):
+    update()
+
+
+carddata = json.load(open("AllCards.json", 'r'))
 cardnames = [english_form(card.encode('utf-8')) for card in carddata]
 
 if __name__ == '__main__':
