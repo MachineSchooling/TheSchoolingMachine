@@ -3,7 +3,6 @@ from parse import *
 import requests
 # Import custom modules.
 from fuzzycard import ApproximateCardname, ApproximateDeckname
-import mtgexceptions
 
 class _Command(object):
     def __init__(self, PRIVMSG, min_privilege="Viewer"):
@@ -69,7 +68,7 @@ class _Command(object):
 
     def parse_format(self, default=None):
         first_arg = self.first_arg().capitalize()
-        format_ = first_arg if first_arg in self.bot.master.formats else default
+        format_ = first_arg if first_arg in self.bot.metagame.content.formats else default
         return format_
 
     #Parsing list strings###############################################################################################
@@ -87,8 +86,7 @@ class _Command(object):
 
     def parse_cards_string(self, cardliststring):
         rawdict = self.parse_quantity_string(cardliststring)
-        carddict = {unicode(ApproximateCardname(key)): rawdict[key] for key in rawdict}
-        #carddict = {ApproximateCardname(key): rawdict[key] for key in rawdict}
+        carddict = {unicode(ApproximateCardname(bot=self.bot, target=key)): rawdict[key] for key in rawdict}
         return carddict
 
     def parse_number(self, quantityliststring):
@@ -213,7 +211,7 @@ class whatdeck(_Command):
 
         format_ = self.parse_format(default="Modern")
 
-        probabilities_table = self.bot.master.whatdeck(format_=format_, carddict=carddict)
+        probabilities_table = self.bot.metagame.content.whatdeck(format_=format_, carddict=carddict)
 
         if probabilities_table:
             message = "Weighted probabilities for {} in {}: ".format(dictstring, format_) \
@@ -244,12 +242,12 @@ class running(_Command):
 
         format_ = self.parse_format(default=None)
 
-        archetype = ApproximateDeckname(parsed['archetype'], format_)
+        archetype = ApproximateDeckname(bot=self.bot, target=parsed['archetype'], format_=format_)
         deckname = archetype.nearest()
         format_ = archetype.nearestformat()
-        cardname = ApproximateCardname(parsed['cardname']).nearest()
+        cardname = ApproximateCardname(bot=self.bot, target=parsed['cardname']).nearest()
 
-        quantity = self.bot.master.running(format_=format_, archetype=deckname, cardname=cardname)
+        quantity = self.bot.metagame.content.running(format_=format_, archetype=deckname, cardname=cardname)
 
         rawmessage = "{} {} runs an average of {} in the maindeck and {} in the sideboard."
         message = rawmessage.format(format_, archetype, quantity["maindeck"], quantity["sideboard"])
@@ -275,11 +273,11 @@ class decklist(_Command):
     def main(self):
         format_ = self.parse_format(None)
 
-        archetype = ApproximateDeckname(self.parsed('archetype'), format_)
+        archetype = ApproximateDeckname(bot=self.bot, target=self.parsed('archetype'), format_=format_)
         deckname = archetype.nearest()
         format_ = archetype.nearestformat()
 
-        url = self.bot.master[format_][deckname].url()
+        url = self.bot.metagame.content[format_][deckname].url()
 
         rawmessage = "The most popular decklist for {} {} can be found here: {}"
         message = rawmessage.format(format_, deckname, url)

@@ -1,13 +1,14 @@
 # Import standard modules.
-import time
-import datetime
+from datetime import datetime
 import socket
 from parse import *
 # Import custom modules.
 from metagame import *
 import commands
 import private
+import metagame
 import mtgjson
+from updateable import Updateable
 
 
 class Response(object):
@@ -81,7 +82,6 @@ class PersonList(object):
     def load(self, document):
         with open(self.file, 'r') as f:
             memberlist = [member.strip('\n') for member in f]
-            f.close()
         return memberlist
 
     def addperson(self, person):
@@ -89,7 +89,6 @@ class PersonList(object):
             self.memberlist.append(person)
             with open(self.file, 'a') as f:
                 f.write(person + '\n')
-                f.close()
             return True
         else:
             return False
@@ -100,7 +99,6 @@ class PersonList(object):
         with open(self.file, 'w') as f:
             for member in self.memberlist:
                 f.write(member + '\n')
-            f.close()
         return True
 
 
@@ -142,21 +140,9 @@ class Bot(object):
             time.sleep(self.joinCOOL)
 
         # Launch the metagame master object.
-        self.masterfile = "metagamemaster.p"
-        # If the object already exists load it. Otherwise, make a new object.
-        try:
-            self.console("Loading metagame master.")
-            self.lastupdate = os.path.getmtime(self.masterfile)
-            self.master = load_metagamemaster(self.masterfile)
-            self.console("Metagame master loaded.")
-        except OSError:
-            self.console("Failed to load metagame master. Creating new metagame master.")
-            self.master = MetagameMaster(self.masterfile)
-            self.lastupdate = os.path.getmtime(self.masterfile)
-            self.console("New metagame master created.")
-
-        # Update the Magic card json.
-        self.update_json()
+        self.metagame = Updateable(bot=self, updater=metagame.MetagameMaster, loader=metagame.load, filename="metagamemaster.p")
+        # Launch the card data object.
+        self.carddata = Updateable(bot=self, updater=mtgjson.update, loader=mtgjson.load, filename="AllCards.json")
 
         print "="+"Online".ljust(100, "=")
 
@@ -164,7 +150,7 @@ class Bot(object):
 
     @staticmethod
     def now():
-        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def console(self, message, mode="Out"):
         direction = "<<" if mode == "In" else ">>"
@@ -185,56 +171,21 @@ class Bot(object):
         self.send("PRIVMSG #{} :{}\r\n".format(CHAN, message))
         self.console("CHAN: {}, MESSAGE: {}".format(CHAN, message))
 
-    def pong(self, ):
+    def pong(self):
         self.send("PONG :tmi.twitch.tv\r\n")
         self.console("PONG")
 
-
-    #FINISHED
-    def update_metagame(self, elapsed=60*60*24, start=0, end=24):
-        """
-        Checks to see if the metagame object is up to date and updates it if it isn't.
-        :param elapsed: Seconds that have elapsed since last update needed to justify an update. (Default one day.)
-        :param start: Beginning of range of hours in day to perform an update.
-        :param end: End of range of hours in day to perform an update.
-        :return: True if metagame object is updated. Else false.
-        """
-        # Get current date-time.
-        nowdate = time.time()
-        # Get current hour of day.
-        nowhour = int(time.strftime("%H"))
-        # If enough time has elapsed since last update and it is currently within updating hours, update.
-        if (nowdate - self.lastupdate > elapsed) and (start < nowhour < end):
-            self.console("Metagame object is updating.")
-            self.master = MetagameMaster(self.masterfile)
-            self.lastupdate = nowdate
-            self.console("Metagame object updated.")
-            return True
-        else:
-            return False
-
-    def update_json(self):
-        self.console("MTGJSON is updating.")
-        mtgjson.update()
-        self.console("MTGJSON updated.")
-
     def main_loop(self):
         while True:
-            # See if metagame data needs to be updated and if so do it.
-            self.update_metagame()
+            # Check for updates.
+            self.metagame.check_update()
+            self.carddata.check_update()
 
             # Read next response from IRC.
-            # Ignore messages with weird unicode characters.
-            try:
-                # Multiple PRIVMSGs may be sent by the server in one response, but are separated by newlines.
-                responses = unicode(self.socket.recv(self.SIZE).decode("utf-8")).splitlines()
-
-                for response in responses:
-                    Response(self, response)
-
-            except UnicodeEncodeError:
-                self.console("Unicode character not recognized.")
-
+            # Multiple PRIVMSGs may be sent by the server in one response, but are separated by newlines.
+            responses = unicode(self.socket.recv(self.SIZE).decode("utf-8")).splitlines()
+            for response in responses:
+                Response(self, response)
 
 if __name__ == "__main__":
     TheSchoolingMachine = Bot(

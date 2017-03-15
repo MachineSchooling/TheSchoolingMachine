@@ -18,6 +18,9 @@ from mtgexceptions import DeckError
 sys.setrecursionlimit(10000)
 
 
+def masterfile():
+    return "metagamemaster.p"
+
 
 def string_try_to_float(x):
     # Converts MTGGoldfish reported data into floats if they're numbers.
@@ -68,7 +71,6 @@ def plausibile(intable, maxrows=5, threshold=.05):
     outtable = [(percent(probability), archetype) for probability, archetype in intable[:maxrows] if probability>threshold]
 
     return outtable
-
 
 
 class Card(dict):
@@ -309,7 +311,6 @@ class Archetype(Decklist):
         return reduce((lambda x, y: x + y), [deck * deck.subshare() for deck in self.sublists])
 
 
-
 class Metagame(dict):
     def __init__(self, format_):
         self.format_ = format_
@@ -378,20 +379,19 @@ class Metagame(dict):
 
 
 class MetagameMaster(dict):
-    def __init__(self, masterfile):
-        self.masterfile = masterfile
+    def __init__(self):
         self.formats = ["Standard", "Modern", "Legacy", "Vintage", "Pauper"]
         for format_ in self.formats:
             self[format_] = Metagame(format_)
         self.pickle()
 
     def pickle(self):
-        f = open(self.masterfile, 'wb')
+        f = open(masterfile(), 'wb')
         cPickle.dump(self, f)
         f.close()
 
     def lastUpdate(self):
-        os.path.getmtime(self.masterfile)
+        os.path.getmtime(masterfile())
 
     def whatdeck(self, format_, carddict):
         return self[format_].whatdeck(carddict)
@@ -404,25 +404,22 @@ class MetagameMaster(dict):
         return [formatarchetype(format_, archetype) for format_ in self for archetype in self[format_]]
 
 
-def load_metagamemaster(masterfile):
-    f = open(masterfile, 'rb')
-    out = cPickle.load(f)
-    f.close()
-    return out
+def load():
+    with open(masterfile(), 'rb') as f:
+        out = cPickle.load(f)
+        return out
 
 
 if __name__ == '__main__':
-    m = "metagamemaster.p"
-
     recalculate = False
     if recalculate:
         start = time.time()
-        master = MetagameMaster(m)
+        master = MetagameMaster()
         master.pickle()
         end = time.time()
         print 'Timing:', end - start
 
-    master = load_metagamemaster(m)
+    master = load()
 
     print 'running:', master["Modern"]["Jund"]["Lightning Bolt"]
     print 'running:', master["Modern"]["Affinity"]["Cranial Plating"]

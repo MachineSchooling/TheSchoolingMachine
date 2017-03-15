@@ -5,6 +5,10 @@ import os.path
 from pprint import pprint
 
 
+def filename():
+    return "AllCards.json"
+
+
 def english_form(string):
     replacelist = [
         ('\xc2\xae', ''),
@@ -23,7 +27,7 @@ def english_form(string):
     return string
 
 
-def update(filename="AllCards.json"):
+def update(filename=filename()):
     zipfilename = filename + ".zip"
 
     urllib.urlretrieve("http://mtgjson.com/json/" + zipfilename, zipfilename)
@@ -32,15 +36,22 @@ def update(filename="AllCards.json"):
         jzip.extractall()
 
 
-if not os.path.exists("AllCards.json"):
-    update()
+class My_Dict(dict):
+    pass
 
 
-carddata = json.load(open("AllCards.json", 'r'))
-cardnames = [english_form(card.encode('utf-8')) for card in carddata]
+def load():
+    jdict = json.load(open(filename(), 'r'))
+    jmydict = My_Dict(jdict)
+    jmydict.cardnames = [english_form(card.encode('utf-8')) for card in jdict]
+    return jmydict
+
 
 if __name__ == '__main__':
     update()
+    carddata = load()
+    cardnames = carddata.cardnames
+
     pprint(cardnames)
 
     print "Cathartic Reunion" in cardnames

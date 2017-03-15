@@ -1,9 +1,5 @@
 # Import standard modules.
-from collections import namedtuple
 from fuzzywuzzy import fuzz
-# Import custom modules.
-import metagame
-import mtgjson
 
 
 class ApproximateString(object):
@@ -60,8 +56,9 @@ class ProspectiveString(object):
 
 
 class ApproximateDeckname(ApproximateString):
-    def __init__(self, target, format_=None):
-        self.master = metagame.load_metagamemaster("metagamemaster.p")
+    def __init__(self, bot, target, format_=None):
+        self.bot = bot
+        self.master = bot.metagame.content
         self.target = target
         self.format_ = format_
         self.options = self.getOptions()
@@ -108,13 +105,14 @@ class ProspectiveDeckname(ProspectiveString):
 
 
 class ApproximateCardname(ApproximateString):
-    def __init__(self, target):
+    def __init__(self, bot, target):
+        self.bot = bot
         self.target = target
         self.options = self.getOptions()
         ApproximateString.__init__(self, target=self.target, options=self.options)
 
     def getOptions(self):
-        return [ProspectiveCardname(target=self.target, prospect=cardname) for cardname in mtgjson.cardnames]
+        return [ProspectiveCardname(target=self.target, prospect=cardname) for cardname in self.bot.carddata.content.cardnames]
 
 
 class ProspectiveCardname(ProspectiveString):
@@ -135,12 +133,12 @@ class ProspectiveCardname(ProspectiveString):
 
 
 if __name__ == "__main__":
-    print ApproximateCardname("lightnng bolt")
-    print ApproximateCardname("ligni btot")
-    print ApproximateCardname("rago")
-    print ApproximateCardname("tramgoyf")
+    print ApproximateCardname(target="lightnng bolt")
+    print ApproximateCardname(target="ligni btot")
+    print ApproximateCardname(target="rago")
+    print ApproximateCardname(target="tramgoyf")
 
-    print ApproximateDeckname("junk", "Modern")
-    print ApproximateDeckname("mricls")
+    print ApproximateDeckname(target="junk", format_="Modern")
+    print ApproximateDeckname(target="mricls")
 
-    print ApproximateDeckname('affinity', None)
+    print ApproximateDeckname(target='affinity', format_=None)
