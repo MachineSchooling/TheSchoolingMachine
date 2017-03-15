@@ -1,9 +1,9 @@
 # Import standard modules.
 from datetime import datetime
+import time
 import socket
 from parse import *
 # Import custom modules.
-from metagame import *
 import commands
 import private
 import metagame
