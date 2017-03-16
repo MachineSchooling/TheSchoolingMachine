@@ -1,18 +1,17 @@
 # Import standard modules.
-from bs4 import BeautifulSoup
-import urllib2
-import re
 import bisect
 import cPickle
 import os
+import re
 import sys
 import time
+import urllib2
+from bs4 import BeautifulSoup
 from collections import namedtuple
 from scipy.stats import hypergeom
 # Import custom modules.
 from mtgexceptions import CardError
 from mtgexceptions import DeckError
-
 
 
 sys.setrecursionlimit(10000)
@@ -404,6 +403,11 @@ class MetagameMaster(dict):
         return [formatarchetype(format_, archetype) for format_ in self for archetype in self[format_]]
 
 
+def update():
+    m = MetagameMaster()
+    m.pickle()
+
+
 def load():
     with open(masterfile(), 'rb') as f:
         out = cPickle.load(f)
@@ -411,11 +415,10 @@ def load():
 
 
 if __name__ == '__main__':
-    recalculate = False
+    recalculate = True
     if recalculate:
         start = time.time()
-        master = MetagameMaster()
-        master.pickle()
+        update()
         end = time.time()
         print 'Timing:', end - start
 

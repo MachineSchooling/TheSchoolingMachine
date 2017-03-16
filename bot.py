@@ -1,13 +1,15 @@
 # Import standard modules.
-from datetime import datetime
 import time
 import socket
+from datetime import datetime
+# Import third party modules.
 from parse import *
 # Import custom modules.
 import commands
 import private
 import metagame
 import mtgjson
+from metagame import *
 from updateable import Updateable
 
 
@@ -71,22 +73,22 @@ class PersonList(object):
 
     def __init__(self, file):
         self.file = file
-        self.memberlist = self.load(self.file)
+        self.member_list = self.load()
 
     def __getitem__(self, item):
-        return self.memberlist[item]
+        return self.member_list[item]
 
     def __iter__(self):
-        return iter(self.memberlist)
+        return iter(self.member_list)
 
-    def load(self, document):
+    def load(self):
         with open(self.file, 'r') as f:
             memberlist = [member.strip('\n') for member in f]
         return memberlist
 
     def addperson(self, person):
-        if person not in self.memberlist:
-            self.memberlist.append(person)
+        if person not in self.member_list:
+            self.member_list.append(person)
             with open(self.file, 'a') as f:
                 f.write(person + '\n')
             return True
@@ -94,10 +96,10 @@ class PersonList(object):
             return False
 
     def delperson(self, person):
-        self.memberlist.remove(person)
+        self.member_list.remove(person)
 
         with open(self.file, 'w') as f:
-            for member in self.memberlist:
+            for member in self.member_list:
                 f.write(member + '\n')
         return True
 
@@ -139,8 +141,8 @@ class Bot(object):
             self.join(CHAN)
             time.sleep(self.joinCOOL)
 
-        # Launch the metagame master object.
-        self.metagame = Updateable(bot=self, updater=metagame.MetagameMaster, loader=metagame.load, filename="metagamemaster.p")
+        # Launch the metagame object.
+        self.metagame = Updateable(bot=self, updater=metagame.update, loader=metagame.load, filename="metagamemaster.p")
         # Launch the card data object.
         self.carddata = Updateable(bot=self, updater=mtgjson.update, loader=mtgjson.load, filename="AllCards.json")
 

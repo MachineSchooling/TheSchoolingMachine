@@ -1,5 +1,6 @@
-import time
+# Import standard modules.
 import os
+import time
 
 
 class Updateable(object):
@@ -40,5 +41,3 @@ class Updateable(object):
             self.bot.console("{} failed to load. Rebuilding.".format(self.filename))
             self.updater()
             return self.loader()
-
-
