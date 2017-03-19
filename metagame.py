@@ -1,7 +1,6 @@
 # Import standard modules.
 import bisect
 import cPickle
-import os
 import re
 import sys
 import time
@@ -218,7 +217,7 @@ class Decklist(object):
     def thisdeck(self, carddict):
         querysize = sum(carddict.values())
         decksize = int(self.main.size())
-        probabilityUnion = self.subshare()
+        probability_union = self.subshare()
 
         for cardname in carddict:
             amounts = [number for number in self.main[cardname] if number != 0]
@@ -231,9 +230,9 @@ class Decklist(object):
                 actualsuccesses = carddict[cardname]
                 successdraws = number
                 cardsdrawn = querysize
-                probabilityUnion *= hypergeom.pmf(k=actualsuccesses, M=decksize, n=successdraws, N=cardsdrawn) * freq
+                probability_union *= hypergeom.pmf(k=actualsuccesses, M=decksize, n=successdraws, N=cardsdrawn) * freq
 
-        return probabilityUnion
+        return probability_union
 
 
     def __getitem__(self, item):
@@ -388,9 +387,6 @@ class MetagameMaster(dict):
         f = open(masterfile(), 'wb')
         cPickle.dump(self, f)
         f.close()
-
-    def lastUpdate(self):
-        os.path.getmtime(masterfile())
 
     def whatdeck(self, format_, carddict):
         return self[format_].whatdeck(carddict)

@@ -7,9 +7,9 @@ from parse import *
 # Import custom modules.
 import commands
 import private
-import metagame
+import metagame # Needed to load/update the metagame master.
 import mtgjson
-from metagame import *
+from metagame import * # Needed to operate the metagame master.
 from updateable import Updateable
 
 
