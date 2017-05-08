@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # Import standard modules.
 import time
 import socket
@@ -142,7 +144,7 @@ class Bot(object):
             time.sleep(self.joinCOOL)
 
         # Launch the metagame object.
-        self.metagame = Updateable(bot=self, updater=metagame.update, loader=metagame.load, filename="metagamemaster.p")
+        self.metagame = Updateable(bot=self, updater=metagame.update, loader=metagame.load, filename="metagame.db")
         # Launch the card data object.
         self.carddata = Updateable(bot=self, updater=mtgjson.update, loader=mtgjson.load, filename="AllCards.json")
 
@@ -188,6 +190,8 @@ class Bot(object):
             responses = unicode(self.socket.recv(self.SIZE).decode("utf-8")).splitlines()
             for response in responses:
                 Response(self, response)
+
+            time.sleep(.1)
 
 if __name__ == "__main__":
     TheSchoolingMachine = Bot(

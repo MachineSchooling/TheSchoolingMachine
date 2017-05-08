@@ -1,435 +1,413 @@
-# Import standard modules.
-import bisect
-import cPickle
+# -*- coding: utf-8 -*-
+
+import math
+import os
+import pathos.multiprocessing as mp
 import re
+import requests
+import sqlite3
 import sys
 import time
-import urllib2
 from bs4 import BeautifulSoup
 from collections import namedtuple
+from collections import OrderedDict
 from scipy.stats import hypergeom
-# Import custom modules.
-from mtgexceptions import CardError
-from mtgexceptions import DeckError
 
-
-sys.setrecursionlimit(10000)
-
-
-def masterfile():
-    return "metagamemaster.p"
-
-
-def string_try_to_float(x):
-    # Converts MTGGoldfish reported data into floats if they're numbers.
-    try:
-        return float(x)
-    except ValueError:
-        try:
-            return float(x.strip('%')) / 100
-        except ValueError:
-            return x
-
-def clean_name(name):
-    # Takes a cardname with art specification and returns just the card's name. (Removes everything in parentheses.)
-    regexDel = "\(([^\)]+)\)"
-    return str(re.sub(regexDel, "", name).strip())
-
-def clean_number(number):
-    # Cleans up whitespace and NUMx from MTGGoldfish HTML and converts to float.
-    return string_try_to_float(number.strip().strip('x'))
-
-
-def percent(float, decimals=0):
-    """
-    :param float: Float to be rewritten as a percentage.
-    :param decimals: Number of decimals to display.
-    :return: 'N%' string.
-    """
-    return "{0:.{1}f}%".format(float * 100, decimals)
-
-def humanform(number, decimals=1):
-    """
-    :param float: Float to be rewritten with specified significant digits.
-    :param decimals: Number of decimals to display.
-    :return: 'N.M' string.
-    """
-    if number == int(number):
-        return str(number)
-    else:
-        return "{0:.{1}f}".format(number, decimals)
-
-def plausibile(intable, maxrows=5, threshold=.05):
-    """
-    :param intable: Table of archetypes and associated probabilities.
-    :param maxrows: Maximum number of archetypes to display.
-    :param threshold: Minimum likelihood to display.
-    :return: outtable is intable rows which satisfy max and threshold restrictions
-    """
-    outtable = [(percent(probability), archetype) for probability, archetype in intable[:maxrows] if probability>threshold]
-
-    return outtable
-
-
-class Card(dict):
-    def __init__(self, name, number=0, percent=1):
-        self.name = name
-        self[number] = percent
-        if number != 0:
-            self[0] = 1 - percent
-
-    def __missing__(self, key):
-        return 0
-
-    def __lt__(self, other):
-        return self.average() < other.average()
-
-    def __str__(self):
-        return "{} {}".format(humanform(self.average()), self.name)
-
-    __repr__ = __str__
-
-    def average(self):
-        return reduce((lambda x, y: x + y), [number * self[number] for number in self])
-
-    def __add__(self, other):
-        if not self.name == other.name:
-            raise CardError("Cards with different names can't be combined.")
-
-        outcard = Card(name=self.name)
-
-        for number in set(self.keys()) | set(other.keys()):
-            outcard[number] = self[number] + other[number]
-
-        return outcard
-
-    __radd__ = __add__
-
-    def __mul__(self, scalar):
-        outcard = Card(name=self.name)
-
-        for number in self.keys():
-            outcard[number] = self[number] * scalar
-
-        return outcard
-
-    __rmul__ = __mul__
-
-
-class Board(dict):
-    def size(self):
-        return sum(self[card].average() for card in self)
-
-    def __missing__(self, key):
-        return Card(name=key)
-
-    def __add__(self, other):
-        outboard = Board()
-
-        for cardname in set(self) | set(other):
-            outboard[cardname] = self[cardname] + other[cardname]
-
-        return outboard
-
-    __radd__ = __add__
-
-    def __mul__(self, scalar):
-        outboard = Board()
-
-        for cardname in self:
-            outboard[cardname] = self[cardname] * scalar
-
-        return outboard
-
-    __rmul__ = __mul__
-
-
-class Decklist(object):
-    def __init__(self, archetype, url=None, rawshare=0):
-        self.url = url
-        self.archetype = archetype
-        self.main = Board()
-        self.side = Board()
-        self.rawshare = rawshare # raw share of decklist in metagame
-        self.populate()
-
-    def cards(self):
-        return self.main + self.side
-
-    def size(self):
-        return self.main.size() + self.side.size()
-
-    def subshare(self):
-        # share of the decklist among decks in the decklist's archetype
-        try:
-            return self.rawshare / self.archetype.share()
-        except ZeroDivisionError:
-            return 0
-
-    def share(self):
-        try:
-            return self.rawshare / self.archetype.metagame.accounted()
-        except ZeroDivisionError:
-            return 0
-
-    def populate(self):
-        if self.url is not None:
-            page = urllib2.urlopen(self.url).read()
-            fullsoup = BeautifulSoup(page, "lxml")
-            soup = fullsoup.find('div', class_="archetype-details")
-        else:
-            return None
-
-        for cardTypeSubsection in soup.find_all('div', class_="archetype-breakdown-section"):
-            # Collect the decklist data from MTGGoldfish from featured/unfeatured cards separately.
-            for featured in cardTypeSubsection.find_all('div', class_="archetype-breakdown-featured-card"):
-                try:
-                    # Collect the decklist data from MTGGoldfish.
-                    cardName = clean_name(featured.find('img')['alt'])
-                    freqqty = featured.find('p', class_="archetype-breakdown-featured-card-text").contents[0]
-                    cardFreqency = clean_number(re.search("[0-9]+%", freqqty).group(0))
-                    cardQuantity = int(clean_number(re.search("[0-9]+x", freqqty).group(0)))
-
-                    # Insert the decklist data into the metagame differentiating between the maindeck/sideboard cards.
-                    if cardTypeSubsection.find('h4').contents[0] != "Sideboard":
-                        self.main[cardName] = Card(cardName, cardQuantity, cardFreqency)
-                    else:
-                        self.side[cardName] = Card(cardName, cardQuantity, cardFreqency)
-                except AttributeError:
-                    pass
-
-            for unfeatured in cardTypeSubsection.find_all('tr'):
-                try:
-                    # Collect the decklist data from MTGGoldfish.
-                    cardName = clean_name(unfeatured.find('a').contents[0])
-                    cardFreqency = clean_number(unfeatured.find('td', class_="deck-col-frequency").contents[0])
-                    cardQuantity = int(clean_number(unfeatured.find('td', class_="deck-col-qty").contents[0]))
-
-                    # Insert the decklist data into the metagame differentiating between the maindeck/sideboard cards.
-                    if cardTypeSubsection.find('h4').contents[0] != "Sideboard":
-                        self.main[cardName] = Card(cardName, cardQuantity, cardFreqency)
-                    else:
-                        self.side[cardName] = Card(cardName, cardQuantity, cardFreqency)
-                except AttributeError:
-                    pass
-
-
-    def thisdeck(self, carddict):
-        querysize = sum(carddict.values())
-        decksize = int(self.main.size())
-        probability_union = self.subshare()
-
-        for cardname in carddict:
-            amounts = [number for number in self.main[cardname] if number != 0]
-
-            # If the deck plays no copies the probability is zero.
-            if not amounts: return 0
-
-            for number in amounts:
-                freq = self.main[cardname][number]
-                actualsuccesses = carddict[cardname]
-                successdraws = number
-                cardsdrawn = querysize
-                probability_union *= hypergeom.pmf(k=actualsuccesses, M=decksize, n=successdraws, N=cardsdrawn) * freq
-
-        return probability_union
-
-
-    def __getitem__(self, item):
-        return {'maindeck': self.main[item], 'sideboard': self.side[item]}
-
-    def __str__(self):
-        return str({'maindeck': self.main, 'sideboard': self.side})
-
-    __repr__ = __str__
-
-    def __add__(self, other):
-        if not self.archetype is other.archetype:
-            raise DeckError("Decklists of different archetypes can't be combined.")
-
-        outdecklist = Decklist(archetype=self.archetype, rawshare=self.rawshare + other.rawshare)
-
-        outdecklist.main = self.main + other.main
-        outdecklist.side = self.side + other.side
-
-        return outdecklist
-
-    __radd__ = __add__
-
-    def __mul__(self, scalar):
-        outdecklist = Decklist(archetype=self.archetype, rawshare=self.rawshare*scalar)
-
-        outdecklist.main = self.main * scalar
-        outdecklist.side = self.side * scalar
-
-        return outdecklist
-
-    __rmul__ = __mul__
-
-
-class Archetype(Decklist):
-    def __init__(self, metagame, name):
-        self.archetype = self
-        self.name = name
-        self.metagame = metagame
-        self.sublists = []
-        self.main = Board()
-        self.side = Board()
-
-    # FINISHED
-    def insort(self, item):
-        # Merge the decklist with the archetype decklist.
-        totalshare = self.rawshare() + item.rawshare
-        oldshare = self.rawshare() / totalshare
-        newshare = item.rawshare / totalshare
-        self.main = self.main * oldshare + item.main * newshare
-        self.side = self.side * oldshare + item.side * newshare
-
-        # Add the decklist to the archetype's list of decklists.
-        bisect.insort(self.sublists, item)
-
-    def rawshare(self):
-        return sum(sublist.rawshare for sublist in self.sublists)
-
-    def subshare(self):
-        return 1
-
-    def share(self):
-        try:
-            return self.rawshare() / self.metagame.accounted()
-        except ZeroDivisionError:
-            return 0
-
-    def url(self):
-        # Use only insort to insert into the archetype so the largest share decklist is always last.
-        return self.sublists[-1].url
-
-    def averagedecklist(self):
-        # Decklist object formed from the weighted subshares of decklists within the archetype.
-        return reduce((lambda x, y: x + y), [deck * deck.subshare() for deck in self.sublists])
-
-
-class Metagame(dict):
-    def __init__(self, format_):
-        self.format_ = format_
-        self.populate()
-
-    def accounted(self):
-        # amount of metagame accounted for
-        return sum(self[archetype].rawshare() for archetype in self)
-
-    def populate(self):
-        url = "https://www.mtggoldfish.com/metagame/" + self.format_ + "/full#online"
-        page = urllib2.urlopen(url).read()
+sys.setrecursionlimit(1000000)
+
+CardsRow = namedtuple("CardsRow", "cardname")
+DecklistsRow = namedtuple("DecklistsRow", "id_deck, cardname, quantity, percent, sideboard")
+FormatsRow = namedtuple("FormatsRow", "formatname")
+MetagamesRow = namedtuple("MetagamesRow", "deckname, formatname, rawshare, url")
+MetagamesRowNumbered = namedtuple("MetagamesRowNumbered", "id_deck, deckname, formatname, rawshare, url")
+
+
+class MetagameMaster(object):
+    def __init__(self, database="metagame.db"):
+        self.database = database
+
+        self.formats = ["Standard", "Modern", "Legacy", "Vintage", "Pauper"]
+
+        self.connection = sqlite3.connect(self.database)
+        self.cursor = self.connection.cursor()
+
+        self.create_function_LOG()
+        self.create_function_EXP()
+        self.create_aggregate_PROD()
+
+    def update(self):
+        open(self.database, 'w').close()  # Wipe database
+        self.create_decklists()
+        self.create_metagames()
+
+        order = int(math.ceil(math.log(len(self.formats), 10)))  # Least power of 10 greater than the number of formats.
+        metagame_rows = [MetagamesRowNumbered(id_deck=i * 10**order + id_format,
+                                              deckname=mr.deckname,
+                                              formatname=mr.formatname,
+                                              rawshare=mr.rawshare,
+                                              url=mr.url)
+                         for id_format, format_ in enumerate(self.formats)
+                         for i, mr in enumerate(self.scrape_metagame(format_))
+                         ]
+        pool = mp.Pool()
+        decklist_rows = [decklist_row
+                         for decklist in pool.imap(self.scrape_decklist, metagame_rows, chunksize=40)
+                         for decklist_row in decklist
+                         ]
+        pool.close()
+        pool.join()
+
+        for row in metagame_rows:
+            self.insert_to_metagames(id_deck=row.id_deck,
+                                     formatname=row.formatname,
+                                     deckname=row.deckname,
+                                     rawshare=row.rawshare,
+                                     url=row.url)
+
+        for row in decklist_rows:
+            self.insert_to_decklists(id_deck=row.id_deck,
+                                     cardname=row.cardname,
+                                     quantity=row.quantity,
+                                     percent=row.percent,
+                                     sideboard=row.sideboard)
+
+        self.connection.commit()
+
+    # Scraping #########################################################################################################
+
+    def scrape_metagame(self, formatname):
+        url = "https://www.mtggoldfish.com/metagame/{}/full#online".format(formatname)
+        page = requests.get(url).content
         fullsoup = BeautifulSoup(page, "lxml")
         soup = fullsoup.find("div", class_="metagame-list-full-content")
 
-        for archetypeTile in soup.find_all(class_="archetype-tile"):
+        decklists = []
+
+        for decklist_tile in soup.find_all(class_="archetype-tile"):
             try:
-                # Collect the archetype data from MTGGoldfish.
+                rawshare = self.string_try_to_float(
+                    decklist_tile.find(class_="percentage col-freq").contents[0].strip('\n')
+                )
+                url_short = decklist_tile.find('a', class_="card-image-tile-link-overlay")["href"]
+                url = "https://www.mtggoldfish.com" + url_short
+                deckname = decklist_tile.find('a', href=url_short + "#online").contents[0]
 
-                # Archetype tile metagame share as it appears on main metagame page.
-                archetypePercent = string_try_to_float(
-                    (archetypeTile.find(class_="percentage col-freq").contents[0]).strip('\n'))
-                # Archetype tile url. (url is non-unique for archetype names.)
-                archetypeLink = archetypeTile.find('a', class_="card-image-tile-link-overlay")["href"]
-                # Add the decklist url and its data to the named archetype's entry in the dict.
-                archetypeURL = "https://www.mtggoldfish.com" + archetypeLink
-                # Name of archetype as it appears on main metagame page.
-                archetypeName = archetypeTile.find('a', href=archetypeLink + "#online").contents[0]
+                decklists.append(MetagamesRow(deckname, formatname, rawshare, url))
 
-                # If no other archetype tiles have this one's name, create its listing.
-                if archetypeName not in self:
-                    currentArchetype = Archetype(metagame=self, name=archetypeName)
-                    self[archetypeName] = currentArchetype
-                else:
-                    currentArchetype = self[archetypeName]
-
-                # Insert the archetype data into the metagame.
-
-                # Create the listing for the decklist in the dict.
-                currentArchetype.insort(
-                    Decklist(archetype=currentArchetype, url=archetypeURL, rawshare=archetypePercent)
-                    )
             except TypeError:
                 pass
 
+        print decklists
+        return decklists
 
-    def whatdeck(self, carddict):
-        rawProbabilities = {archetype: self[archetype].thisdeck(carddict) * self[archetype].share()
-                            for archetype in self}
+    def scrape_decklist(self, decklist_row):
+        url = decklist_row.url
 
-        accounted = sum(rawProbabilities.values())
-        if not accounted: return []
+        page = requests.get(url).content
+        fullsoup = BeautifulSoup(page, "lxml")
+        soup = fullsoup.find('div', class_="archetype-details")
 
-        probabilities = {archetype: rawProbabilities[archetype] / accounted for archetype in rawProbabilities}
+        cards = []
 
-        outtable = [(probabilities[archetype], archetype) for archetype in probabilities]
-        outtable.sort(reverse=True)
+        for card_type_subsection in soup.find_all('div', class_="archetype-breakdown-section"):
+            for featured in card_type_subsection.find_all('div', class_="archetype-breakdown-featured-card"):
+                try:
+                    cardname = self.clean_name(featured.find('img')['alt'])
+                    percent_quantity = featured.find('p', class_="archetype-breakdown-featured-card-text").contents[0]
+                    percent = self.clean_number(re.search("[0-9]+%", percent_quantity).group(0))
+                    quantity = int(self.clean_number(re.search("[0-9]+x", percent_quantity).group(0)))
+                    sideboard = card_type_subsection.find('h4').contents[0] == "Sideboard"
+                    cards.append(DecklistsRow(decklist_row.id_deck, cardname, quantity, percent, sideboard))
+                except AttributeError:
+                    pass
+            for unfeatured in card_type_subsection.find_all('tr'):
+                try:
+                    cardname = self.clean_name(unfeatured.find('a').contents[0])
+                    percent = self.clean_number(unfeatured.find('td', class_="deck-col-frequency").contents[0])
+                    quantity = int(self.clean_number(unfeatured.find('td', class_="deck-col-qty").contents[0]))
+                    sideboard = card_type_subsection.find('h4').contents[0] == "Sideboard"
+                    cards.append(DecklistsRow(decklist_row.id_deck, cardname, quantity, percent, sideboard))
+                except AttributeError:
+                    pass
 
-        outtable = plausibile(outtable)
+        print cards
+        return cards
 
+    # Formatting #######################################################################################################
+
+    @staticmethod
+    def string_try_to_float(x):
+        # Converts MTGGoldfish reported data into floats if they're numbers.
+        try:
+            return float(x)
+        except ValueError:
+            try:
+                return float(x.strip('%')) / 100
+            except ValueError:
+                return x
+
+    @staticmethod
+    def clean_name(name):
+        # Takes a cardname with art specification and returns just the card's name. (Removes everything in parentheses.)
+        regex_del = "\(([^\)]+)\)"
+        return str(re.sub(regex_del, "", name).strip())
+
+    def clean_number(self, number):
+        # Cleans up whitespace and NUMx from MTGGoldfish HTML and converts to float.
+        return self.string_try_to_float(number.strip().strip('x'))
+
+    @staticmethod
+    def percent(num, decimals=0):
+        """
+        :param num: Float to be rewritten as a percentage.
+        :param decimals: Number of decimals to display.
+        :return: 'N%' string.
+        """
+        return "{0:.{1}f}%".format(num * 100, decimals)
+
+    @staticmethod
+    def humanform(number, decimals=1):
+        """
+        :param number: Float to be rewritten with specified significant digits.
+        :param decimals: Number of decimals to display.
+        :return: 'N.M' string.
+        """
+        if number == int(number):
+            return str(number)
+        else:
+            return "{0:.{1}f}".format(number, decimals)
+
+    def plausibile(self, intable, maxrows=5, threshold=.05):
+        """
+        :param intable: Table of archetypes and associated probabilities.
+        :param maxrows: Maximum number of archetypes to display.
+        :param threshold: Minimum likelihood to display.
+        :return: outtable is intable rows which satisfy max and threshold restrictions
+        """
+        outtable = [(self.percent(probability), archetype) for probability, archetype in intable[:maxrows] if
+                    probability > threshold]
         return outtable
 
-    def archetypes(self):
-        formatarchetype = namedtuple("formatarchetype", ["format_", "archetype"])
-        return [formatarchetype(self.format_, archetype) for archetype in self]
+    # SQL setup ########################################################################################################
 
+    def create_function_LOG(self):
+        self.connection.create_function("LOG", 1, math.log)
 
-class MetagameMaster(dict):
-    def __init__(self):
-        self.formats = ["Standard", "Modern", "Legacy", "Vintage", "Pauper"]
-        for format_ in self.formats:
-            self[format_] = Metagame(format_)
-        self.pickle()
+    def create_function_EXP(self):
+        self.connection.create_function("EXP", 1, math.exp)
 
-    def pickle(self):
-        f = open(masterfile(), 'wb')
-        cPickle.dump(self, f)
-        f.close()
+    def create_aggregate_PROD(self):
+        class P(object):
+            def __init__(self):
+                self.prod = 1
 
-    def whatdeck(self, format_, carddict):
-        return self[format_].whatdeck(carddict)
+            def step(self, value):
+                self.prod *= value
 
-    def running(self, format_, archetype, cardname):
-        return self[format_][archetype][cardname]
+            def finalize(self):
+                return self.prod
 
-    def archetypes(self):
-        formatarchetype = namedtuple("formatarchetype", ["format_", "archetype"])
-        return [formatarchetype(format_, archetype) for format_ in self for archetype in self[format_]]
+        self.connection.create_aggregate("PROD", 1, P)
+
+    def create_aggregate_THISDECK(self, carddict):
+        def hg(cardname, quantity, percent):
+            try:
+                actualsuccesses = carddict[cardname]
+                decksize = 60
+                successdraws = quantity
+                cardsdrawn = sum(carddict.values())
+                return hypergeom.pmf(k=actualsuccesses, M=decksize, n=successdraws, N=cardsdrawn) * percent
+            except KeyError:
+                return 0
+
+        class TD(object):
+            def __init__(self):
+                self.prod = 0
+                self.accounted = set()
+
+            def step(self, rawshare, cardname, quantity, percent):
+                if cardname in carddict:
+                    self.accounted.add(cardname)
+                    if self.prod is 0:
+                        self.prod = rawshare
+                    self.prod *= hg(cardname, quantity, percent)
+
+            def finalize(self):
+                if self.accounted == set(carddict.keys()):
+                    return self.prod
+                else:
+                    return 0
+
+        self.connection.create_aggregate("THISDECK", 4, TD)
+
+    def create_decklists(self):
+        command = """
+        CREATE TABLE decklists (
+        id INTEGER PRIMARY KEY,
+        id_deck INTEGER,
+        cardname VARCHAR(100),
+        quantity INTEGER,
+        percent FLOAT,
+        sideboard BOOL
+        )
+        """
+        self.cursor.execute(command)
+
+    def create_metagames(self):
+        command = """
+        CREATE TABLE metagames (
+        id INTEGER PRIMARY KEY,
+        id_deck INTEGER,
+        formatname VARCHAR(100),
+        deckname VARCHAR(100),
+        rawshare FLOAT,
+        url VARCHAR(100)
+        )
+        """
+        self.cursor.execute(command)
+
+    def insert_to_decklists(self, id_deck, cardname, quantity, percent, sideboard):
+        command = """
+        INSERT INTO decklists (id_deck, cardname, quantity, percent, sideboard)
+        VALUES (?,?,?,?,?)
+        """
+        self.cursor.execute(command, [id_deck, cardname, quantity, percent, sideboard])
+
+    def insert_to_metagames(self, id_deck, formatname, deckname, rawshare, url):
+        command = """
+        INSERT INTO metagames (id_deck, formatname, deckname, rawshare, url)
+        VALUES (?,?,?,?,?)
+        """
+        self.cursor.execute(command, [id_deck, formatname, deckname, rawshare, url])
+
+    # SQL queries ######################################################################################################
+
+    def decknames(self, formatname=None, show_formats=False):
+        if formatname:
+            formatname_specification = "WHERE formatname = ?"
+            args = [formatname]
+        else:
+            formatname_specification = ""
+            args = []
+
+        command = """
+        SELECT DISTINCT deckname, formatname
+        FROM metagames
+        {}
+        ORDER BY rawshare DESC
+        """.format(formatname_specification)
+        self.cursor.execute(command, args)
+
+        result = self.cursor.fetchall()
+
+        if show_formats:
+            output = OrderedDict()
+            for i in result:
+                output[i[0]] = i[1]
+        else:
+            output = [i[0] for i in result]
+
+        return output
+
+    def whatdeck(self, formatname, carddict):
+        self.create_aggregate_THISDECK(carddict)
+
+        table_thisdeck = """
+        SELECT d.id_deck, deckname, THISDECK(rawshare, cardname, quantity, percent) AS thisdeck
+        FROM decklists d
+        JOIN metagames m
+        ON d.id_deck = m.id_deck
+        WHERE sideboard = 0 AND formatname = ?
+        GROUP BY d.id_deck
+        """
+
+        command = """
+        SELECT SUM(thisdeck) / (SELECT SUM(thisdeck) FROM ({})) AS probability, deckname
+        FROM({})
+        GROUP BY deckname
+        HAVING probability > .05
+        ORDER BY probability DESC
+        LIMIT 5
+        """.format(table_thisdeck, table_thisdeck)
+
+        self.cursor.execute(command, [formatname, formatname])
+        result = self.cursor.fetchall()
+        return self.plausibile(result)
+
+    def running(self, formatname, deckname, cardname):
+        command = """
+        SELECT SUM(ev * rawshare) / SUM(rawshare), sideboard
+        FROM(
+            SELECT SUM(CASE WHEN cardname = ? THEN d.quantity * d.percent ELSE 0 END) AS ev, rawshare, sideboard
+            FROM decklists d
+            JOIN metagames m
+            ON m.id_deck = d.id_deck
+            WHERE formatname = ? AND deckname = ?
+            GROUP BY d.id_deck, sideboard
+            )
+        GROUP BY sideboard
+        """
+        self.cursor.execute(command, [cardname, formatname, deckname])
+        result = self.cursor.fetchall()
+
+        outdict = {'maindeck': '0', 'sideboard': '0'}
+        for board in result:
+            outdict[('maindeck', 'sideboard')[board[1]]] = self.humanform(board[0])  # board[1] determines the board
+
+        return outdict
+
+    def decklist(self, deckname, formatname=None):
+        if formatname:
+            format_restriction = "AND formatname = ?"
+            args = [deckname, formatname]
+        else:
+            format_restriction = ""
+            args = [deckname]
+
+        command = """
+        SELECT m.url
+        FROM metagames m
+        JOIN decklists d
+        ON d.id_deck = m.id_deck
+        WHERE deckname = ? {}
+        ORDER BY m.rawshare DESC
+        LIMIT 1
+        """.format(format_restriction)
+        self.cursor.execute(command, args)
+        result = self.cursor.fetchall()
+        return result[0][0]
 
 
 def update():
-    m = MetagameMaster()
-    m.pickle()
+    master = MetagameMaster()
+    master.update()
 
 
 def load():
-    with open(masterfile(), 'rb') as f:
-        out = cPickle.load(f)
-        return out
+    master = MetagameMaster()
+    return master
 
 
-if __name__ == '__main__':
-    recalculate = True
-    if recalculate:
-        start = time.time()
-        update()
-        end = time.time()
-        print 'Timing:', end - start
+if __name__ == "__main__":
+    m = MetagameMaster()
 
-    master = load()
+    update = False
 
-    print 'running:', master["Modern"]["Jund"]["Lightning Bolt"]
-    print 'running:', master["Modern"]["Affinity"]["Cranial Plating"]
-    print 'running:', master["Legacy"]["Miracles"]["Force of Will"]
-    print 'whatdeck:', master["Modern"].whatdeck({"Tarmogoyf": 1})
-    print 'whatdeck:', master.whatdeck("Modern", {"Tarmogoyf": 1})
-    print 'whatdeck:', master["Modern"].whatdeck({"Polluted Delta": 1})
-    print 'whatdeck:', master["Modern"].whatdeck({"Polluted Delta": 4})
-    print 'whatdeck:', master["Modern"].whatdeck({"Thalia, Guardian of Thraben": 2, "Thought-Knot Seer": 1})
-    print 'whatdeck:', master["Legacy"].whatdeck({"Mountain": 1, "Lightning Bolt": 1, "Monastery Swiftspear": 2})
+    if update:
+        t0 = time.time()
+        m.update()
+        t1 = time.time()
+        print "timing:", t1 - t0
 
-    print "Legacy decks:", [a.archetype for a in master["Legacy"].archetypes()]
-
-    print 'whatdeck:', master.whatdeck("Modern", {"Lightning Bolt": 1, "Polluted Delta": 2})
+    print "formats:", m.formats
+    print "decknames:", m.decknames()
+    print "decknames:", m.decknames(show_formats=True)
+    print "decknames standard:", m.decknames("Standard")
+    print "decklist:", m.decklist(u"Dredge")
+    print "decklist:", m.decklist(deckname=u"Dredge", formatname="Vintage")
+    print "running:", m.running("Modern", u"Dredge", "Ancient Grudge")
+    print "running:", m.running("Modern", "Affinity", "Etched Champion")
+    print "running:", m.running("Modern", "Abzan", "Tarmogoyf")
+    print "whatdeck:", m.whatdeck("Modern", {"Death's Shadow": 1, "Bloodstained Mire": 2})
+    print "whatdeck:", m.whatdeck("Modern", {"Eldrazi Temple": 1, "Chalice of the Void": 2})
+    print "whatdeck:", m.whatdeck("Modern", {"Tarmogoyf": 2, "Forest": 1})

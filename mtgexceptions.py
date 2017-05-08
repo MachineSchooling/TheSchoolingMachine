@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 class DeckError(Exception):
     def __init__(self, deck):
         self.deck = deck

@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
+
 import urllib
 import zipfile
 import json
-import os.path
 from pprint import pprint
 
 
@@ -36,13 +37,13 @@ def update(filename=filename()):
         jzip.extractall()
 
 
-class My_Dict(dict):
+class MyDict(dict):
     pass
 
 
 def load():
     jdict = json.load(open(filename(), 'r'))
-    jmydict = My_Dict(jdict)
+    jmydict = MyDict(jdict)
     jmydict.cardnames = [english_form(card.encode('utf-8')) for card in jdict]
     return jmydict
 
@@ -54,4 +55,4 @@ if __name__ == '__main__':
 
     pprint(cardnames)
 
-    print "Cathartic Reunion" in cardnames
+    print "As Foretold" in cardnames

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # Import standard modules.
 from parse import *
 import requests
@@ -202,16 +204,11 @@ class whatdeck(_Command):
 
     def main(self):
         parsed = self.parsed()
-
         cardstring = parsed["cardstring"]
-
         carddict = self.parse_cards_string(cardstring)
-
         dictstring = ", ".join(str(carddict[cardname]) + ' ' + str(cardname) for cardname in carddict)
-
         format_ = self.parse_format(default="Modern")
-
-        probabilities_table = self.bot.metagame.content.whatdeck(format_=format_, carddict=carddict)
+        probabilities_table = self.bot.metagame.content.whatdeck(formatname=format_, carddict=carddict)
 
         if probabilities_table:
             message = "Weighted probabilities for {} in {}: ".format(dictstring, format_) \
@@ -239,18 +236,15 @@ class running(_Command):
 
     def main(self):
         parsed = parse(self.pattern(), self.args)
-
         format_ = self.parse_format(default=None)
-
         archetype = ApproximateDeckname(bot=self.bot, target=parsed['archetype'], format_=format_)
         deckname = archetype.nearest()
-        format_ = archetype.nearestformat()
+        format_ = archetype.nearest_format()
         cardname = ApproximateCardname(bot=self.bot, target=parsed['cardname']).nearest()
+        quantity = self.bot.metagame.content.running(formatname=format_, deckname=deckname, cardname=cardname)
 
-        quantity = self.bot.metagame.content.running(format_=format_, archetype=deckname, cardname=cardname)
-
-        rawmessage = "{} {} runs an average of {} in the maindeck and {} in the sideboard."
-        message = rawmessage.format(format_, archetype, quantity["maindeck"], quantity["sideboard"])
+        rawmessage = "{} {} runs an average of {} {} in the maindeck and {} in the sideboard."
+        message = rawmessage.format(format_, archetype, quantity["maindeck"], cardname, quantity["sideboard"])
 
         self.chat(message)
 
@@ -275,9 +269,9 @@ class decklist(_Command):
 
         archetype = ApproximateDeckname(bot=self.bot, target=self.parsed('archetype'), format_=format_)
         deckname = archetype.nearest()
-        format_ = archetype.nearestformat()
+        format_ = archetype.nearest_format()
 
-        url = self.bot.metagame.content[format_][deckname].url()
+        url = self.bot.metagame.content.decklist(deckname=deckname, formatname=format_)
 
         rawmessage = "The most popular decklist for {} {} can be found here: {}"
         message = rawmessage.format(format_, deckname, url)

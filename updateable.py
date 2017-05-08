@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # Import standard modules.
 import os
 import time
@@ -6,12 +8,12 @@ import time
 class Updateable(object):
     def __init__(self, bot, updater, loader, filename, elapsed=60 * 60 * 24, start=5, end=6):
         self.bot = bot
-        self.updater = updater #updates file
-        self.loader = loader #returns object
-        self.filename = filename #name of file where object data is stored
-        self.elapsed = elapsed #how often to update (in seconds)
-        self.start = start #beginning time of day where update is allowed
-        self.end = end #ending time of day when update is allowed
+        self.updater = updater  # updates file
+        self.loader = loader  # returns object
+        self.filename = filename  # name of file where object data is stored
+        self.elapsed = elapsed  # how often to update (in seconds)
+        self.start = start  # beginning time of day where update is allowed
+        self.end = end  # ending time of day when update is allowed
 
         self.content = self.load()
 

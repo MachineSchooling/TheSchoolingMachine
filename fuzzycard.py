@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # Import standard modules.
 from fuzzywuzzy import fuzz
 
@@ -7,11 +9,11 @@ class ApproximateString(object):
         self.string = target
         self.options = options
 
-    def nearestobject(self):
+    def nearest_object(self):
         return max(self.options)
 
     def nearest(self):
-        return unicode(self.nearestobject())
+        return unicode(self.nearest_object())
 
     def __str__(self):
         return self.nearest()
@@ -34,15 +36,15 @@ class ProspectiveString(object):
 
     def transform(self):
         transformed = [self]
-        for function in self.transformations:
-            nexttransformed = getattr(self, function)()
-            if isinstance(nexttransformed, list):
-                transformed += nexttransformed
+        for f in self.transformations:
+            next_transformed = getattr(self, f)()
+            if isinstance(next_transformed, list):
+                transformed += next_transformed
             else:
-                transformed.append(nexttransformed)
+                transformed.append(next_transformed)
         return transformed
 
-    def getString(self):
+    def get_string(self):
         return self.untransformed.prospect if self.untransformed else self.prospect
 
     def __eq__(self, other):
@@ -61,19 +63,16 @@ class ApproximateDeckname(ApproximateString):
         self.master = bot.metagame.content
         self.target = target
         self.format_ = format_
-        self.options = self.getOptions()
+        self.options = self.get_options()
         ApproximateString.__init__(self, target=self.target, options=self.options)
 
-    def getOptions(self):
-        if self.format_:
-            return [ProspectiveDeckname(target=self.target, prospect=archetype.archetype, format_=archetype.format_)
-                    for archetype in self.master[self.format_].archetypes()]
-        else:
-            return [ProspectiveDeckname(target=self.target, prospect=archetype.archetype, format_=archetype.format_)
-                    for archetype in self.master.archetypes()]
+    def get_options(self):
+        namedict = self.master.decknames(formatname=self.format_, show_formats=True)
+        return [ProspectiveDeckname(target=self.target, prospect=archetype, format_=namedict[archetype])
+                for archetype in namedict]
 
-    def nearestformat(self):
-        return self.nearestobject().format_
+    def nearest_format(self):
+        return self.nearest_object().format_
 
 
 class ProspectiveDeckname(ProspectiveString):
@@ -86,7 +85,7 @@ class ProspectiveDeckname(ProspectiveString):
         ProspectiveString.__init__(self, target=self.target, prospect=self.prospect, transformations=self.transformations)
 
     def _aliased(self):
-        aliassets = [
+        alias_sets = [
             ["Abzan", "Junk"],
             ["Affinity", "Robots"],
             ["Tron", "RG Tron"],
@@ -96,22 +95,21 @@ class ProspectiveDeckname(ProspectiveString):
             ["Jeskai Control", "Nahiri Control", "Jeskai Nahiri"],
             ["Hatebears", "Death and Taxes"]
         ]
-        for aliasset in aliassets:
-            if self.prospect in aliasset:
+        for alias_set in alias_sets:
+            if self.prospect in alias_set:
                 return [ProspectiveDeckname(target=self.target, prospect=deckname, format_=self.format_, untransformed=self)
-                        for deckname in aliasset]
+                        for deckname in alias_set]
         return []
-
 
 
 class ApproximateCardname(ApproximateString):
     def __init__(self, bot, target):
         self.bot = bot
         self.target = target
-        self.options = self.getOptions()
+        self.options = self.get_options()
         ApproximateString.__init__(self, target=self.target, options=self.options)
 
-    def getOptions(self):
+    def get_options(self):
         return [ProspectiveCardname(target=self.target, prospect=cardname) for cardname in self.bot.carddata.content.cardnames]
 
 
@@ -129,7 +127,6 @@ class ProspectiveCardname(ProspectiveString):
             return ProspectiveCardname(target=self.target, prospect=epithetless, untransformed=self)
         else:
             return []
-
 
 
 if __name__ == "__main__":
