@@ -9,9 +9,9 @@ from parse import *
 # Import custom modules.
 import commands
 import private
-import metagame # Needed to load/update the metagame master.
+import metagame  # Needed to load/update the metagame master.
 import mtgjson
-from metagame import * # Needed to operate the metagame master.
+from metagame import *  # Needed to operate the metagame master.
 from updateable import Updateable
 
 
@@ -75,6 +75,11 @@ class PersonList(object):
 
     def __init__(self, file):
         self.file = file
+
+        # Create file if it doesn't exist.
+        with open(self.file, 'a+') as f:
+            pass
+
         self.member_list = self.load()
 
     def __getitem__(self, item):
@@ -110,6 +115,8 @@ class Bot(object):
     # The main object that runs the bot, interfaces with the IRC, and calls helper programs.
 
     def __init__(self, HOST, PORT, NICK, PASS):
+        self.quit = False
+
         print "="+"Loading".ljust(100, "=")
 
         # Server id data.
@@ -142,6 +149,9 @@ class Bot(object):
         for CHAN in self.CHANlist:
             self.join(CHAN)
             time.sleep(self.joinCOOL)
+
+        # Bot administrators.
+        self.administrators = PersonList("administrators.txt")
 
         # Launch the metagame object.
         self.metagame = Updateable(bot=self, updater=metagame.update, loader=metagame.load, filename="metagame.db")
@@ -180,7 +190,7 @@ class Bot(object):
         self.console("PONG")
 
     def main_loop(self):
-        while True:
+        while not self.quit:
             # Check for updates.
             self.metagame.check_update()
             self.carddata.check_update()
@@ -194,9 +204,8 @@ class Bot(object):
             time.sleep(.1)
 
 if __name__ == "__main__":
-    TheSchoolingMachine = Bot(
-        HOST="irc.chat.twitch.tv",
-        PORT=6667,
-        NICK="theschoolingmachine",
-        PASS=private.PASS
-    )
+    TheSchoolingMachine = Bot(HOST="irc.chat.twitch.tv",
+                              PORT=6667,
+                              NICK="theschoolingmachine",
+                              PASS=private.PASS
+                              )

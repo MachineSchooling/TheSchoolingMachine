@@ -299,3 +299,18 @@ class pronounce(_Command):
             message = "No pronunciation for \"{}\" found.".format(word)
 
         self.chat(message)
+
+#Administrator commands#################################################################################################
+
+class quit(_Command):
+    # Turn the bot off (bot administrator only).
+    def __init__(self, PRIVMSG):
+        _Command.__init__(self, PRIVMSG)
+
+    def main(self):
+        user = self.PRIVMSG.NICK
+        if user in self.bot.administrators:
+            message = "Bot will now shut down."
+            self.chat(message)
+            self.bot.quit = True
+
