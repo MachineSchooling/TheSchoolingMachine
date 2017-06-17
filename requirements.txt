@@ -1,0 +1,5 @@
+parse
+pathos
+python-levenshtein
+fuzzywuzzy
+scipy

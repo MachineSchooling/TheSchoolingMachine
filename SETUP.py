@@ -3,7 +3,7 @@
 import pip
 
 def get_dependencies():
-    f = open("dependencies.txt")
+    f = open("requirements.txt")
     dependencies = [line.strip() for line in f]
     f.close()
     return dependencies
