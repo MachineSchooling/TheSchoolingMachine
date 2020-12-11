@@ -1,5 +1,5 @@
 # TheSchoolingMachine
-TheSchoolingMachine is an IRC bot created and maintained by Twitch user MachineSchooling to provide advanced features related to Magic: the Gathering to Twitch users. The project started in summer 2016, and new features are being actively introduced. TheSchoolingMachine is written in Python 2.7.
+TheSchoolingMachine is an IRC bot created and maintained by Twitch user MachineSchooling to provide advanced features related to Magic: the Gathering to Twitch users. The project started in summer 2016. TheSchoolingMachine is written in Python 2.7.
 
 # Commands:
 
