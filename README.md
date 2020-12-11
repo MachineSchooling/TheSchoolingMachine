@@ -5,7 +5,7 @@ TheSchoolingMachine is an IRC bot created and maintained by Twitch user MachineS
 
 !join
 
-Type this command in TheSchoolingMachine's Twitch chat (https://www.twitch.tv/machineschooling) to have the bot join your channel and have its commands be accessable from your chat.
+Type this command in TheSchoolingMachine's Twitch chat (https://www.twitch.tv/TheSchoolingMachine) to have the bot join your channel and have its commands be accessable from your chat.
 
 !part
 
